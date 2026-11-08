@@ -1,0 +1,82 @@
+/* Supplied photographs are treated as illustrative visuals, not study evidence. */
+.hero-photo {
+  width: min(100%, 330px);
+  margin: 30px 0 0;
+  padding: 8px 8px 11px;
+  background: #fffdf8;
+  box-shadow: 0 8px 19px #352d211f;
+  transform: rotate(2deg);
+  overflow: hidden;
+  position: relative;
+  transition: transform .3s ease, box-shadow .3s ease;
+}
+.hero-photo img {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  transition: transform .35s ease;
+}
+.hero-photo figcaption {
+  padding: 9px 4px 0;
+  font-family: var(--display);
+  font-size: .76rem;
+  text-align: center;
+  color: var(--blue);
+}
+.place-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.place-art { height: 190px; }
+.place-art.art-photo {
+  display: block;
+  overflow: hidden;
+  position: relative;
+  transition: transform .3s ease, box-shadow .3s ease;
+}
+.place-art.art-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: transform .35s ease;
+}
+.place-card h3 { font-size: 1.15rem; }
+@media (hover: hover) {
+  .hero-photo:hover {
+    z-index: 3;
+    transform: rotate(0deg) scale(1.065);
+    box-shadow: 0 0 0 3px #fff9ee, 0 0 22px 5px #e4b65399, 0 14px 30px #352d2133;
+  }
+  .hero-photo:hover img { transform: scale(1.06); }
+  .place-card { position: relative; }
+  .place-card:hover { z-index: 3; }
+  .place-card:hover .place-art.art-photo {
+    transform: translateY(-5px) scale(1.075);
+    box-shadow: 0 0 0 3px #fff9ee, 0 0 22px 5px #e4b653aa, 0 13px 25px #352d2130;
+  }
+  .place-card:hover .place-art.art-photo img { transform: scale(1.075); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-photo,
+  .hero-photo img,
+  .place-art.art-photo,
+  .place-art.art-photo img { transition: none; }
+  .hero-photo:hover,
+  .hero-photo:hover img,
+  .place-card:hover .place-art.art-photo,
+  .place-card:hover .place-art.art-photo img { transform: none; }
+}
+@media (max-width: 1000px) {
+  .place-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+  .place-art { height: 230px; }
+}
+@media (max-width: 760px) {
+  .hero-photo { margin: 0; }
+  .hero-photo img { height: 160px; }
+}
+@media (max-width: 540px) {
+  .hero-photo { margin: 25px auto; }
+  .hero-photo img { height: 180px; }
+  .place-grid { grid-template-columns: 1fr; }
+  .place-art { height: 220px; }
+}

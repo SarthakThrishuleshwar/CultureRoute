@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f3e9">
+  <meta name="description" content="CultureRoute explores cultural attractions, day itineraries, and the data behind them across 45 Indian cities. A visual concept for the DEV AAT project.">
+  <title>CultureRoute — Explore the culture behind every route</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="photos.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="page-shell">
+    <header class="site-header" id="top">
+      <a class="brand" href="#top" aria-label="CultureRoute home"><span class="brand-mark" aria-hidden="true">✳</span> Culture<span>Route</span></a>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="#discover">Discover</a><a href="#planner">Plan a day</a><a href="#insights">Insights</a><a href="#lab">DEV Lab</a>
+      </nav>
+      <a class="header-note" href="#about">About the project <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-left">
+          <p class="eyebrow">Cultural tourism / India / DEV AAT</p>
+          <h1 id="hero-title">Explore the culture<br>behind <em>every route.</em></h1>
+          <svg class="hero-underline" viewBox="0 0 460 34" aria-hidden="true"><path d="M4 22C115 6 294 8 455 16M72 31c111-14 256-13 361-7"/></svg>
+          <div class="hero-actions"><a class="button button-primary" href="#discover">Explore a city <span aria-hidden="true">↗</span></a><a class="text-link" href="#lab">See the DEV Lab <span aria-hidden="true">→</span></a></div>
+          <p class="hero-caption">A visual concept for the CultureRoute project. Study data is synthetic.</p>
+        </div>
+        <div class="hero-right">
+          <svg class="doodle-star" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 4 59 34 88 15 72 43 99 52 69 59 83 88 55 70 45 99 40 68 8 82 29 55 1 43 34 40 20 11 46 31Z"/></svg>
+          <p class="hero-intro">Find heritage sites, museums, religious places, and food experiences. Then see how the route and the evidence come together.</p>
+          <figure class="hero-photo"><img src="assets/green-landscape.jpg" alt="Green hills and a lake in a landscape photograph supplied for CultureRoute" width="700" height="438"><figcaption>A place to begin exploring</figcaption></figure>
+          <div class="sticky">45 cities to explore.<br>One route at a time.<span class="tape" aria-hidden="true"></span></div>
+        </div>
+        <svg class="hero-arrow" viewBox="0 0 150 85" aria-hidden="true"><path d="M5 29c56-36 82 5 39 30-25 14-34-26 14-26 27 0 42 22 70 33m-17-17 17 17-23 4"/></svg>
+      </section>
+
+      <section class="stats section-pad" aria-label="Project scope">
+        <div class="stat"><strong>45</strong><span>Indian cities<br>in the study</span></div>
+        <div class="stat"><strong>675</strong><span>listed attractions<br>in scope</span></div>
+        <div class="stat"><strong>411</strong><span>non-cancelled trips<br>in the analysis</span></div>
+        <div class="stat"><strong>24</strong><span>distinct source tables<br>after deduplication</span></div>
+      </section>
+
+      <section class="intro section-pad" id="about">
+        <h2>Plan the day.<br><em>Understand the data.</em></h2>
+        <div><p>CultureRoute connects two experiences: a cultural day-trip planner for travelers and a DEV Lab for anyone who wants to inspect the source, transformations, charts, and forecasts.</p><a class="under-link" href="#workflow">See how it works <span aria-hidden="true">↗</span></a></div>
+      </section>
+
+      <section class="features section-pad" id="discover">
+        <div class="section-heading"><div><p class="eyebrow">01 / Discover and decide</p><h2>Everything you need<br>to make a day count</h2></div><p>Find the places that interest you, check what a route can cover, and keep the method in view.</p></div>
+        <div class="feature-grid">
+          <article class="feature"><span class="feature-icon" aria-hidden="true">✳</span><div><h3>Discover a city</h3><p>Browse attractions by cultural category, entry price, and step-free access. See the catalog beside a city map.</p></div></article>
+          <article class="feature"><span class="feature-icon" aria-hidden="true">↗</span><div><h3>Build a cultural day</h3><p>Set a date, start time, budget, time window, and preferred stops. See schedules, travel legs, and costs.</p></div></article>
+          <article class="feature"><span class="feature-icon" aria-hidden="true">⇄</span><div><h3>Compare two plans</h3><p>Put the fastest feasible route beside the one with the most cultural stops under the same constraints.</p></div></article>
+          <article class="feature"><span class="feature-icon" aria-hidden="true">▥</span><div><h3>Follow the evidence</h3><p>Switch between chart, table, and calculation details. See counts, denominators, filters, and source rows.</p></div></article>
+        </div>
+      </section>
+
+      <section class="places section-pad" aria-labelledby="places-title">
+        <div class="places-heading"><p class="eyebrow">A little inspiration</p><h2 id="places-title">Culture is in the details</h2><p>Categories the project studies across attraction listings, online interactions, and planned stops.</p></div>
+        <div class="place-grid">
+          <article class="place-card"><div class="place-art art-photo"><img src="assets/heritage-fort.avif" alt="Historic stone fort rising above a city" width="822" height="522" loading="lazy"></div><span class="card-kicker">01 / Heritage</span><h3>Stories in stone</h3><p>Explore historic places and see whether they make it into a feasible day plan.</p></article>
+          <article class="place-card lifted"><div class="place-art art-photo"><img src="assets/museum-interior.jpg" alt="Ornate heritage interior with decorative walls and a vaulted ceiling" width="711" height="431" loading="lazy"></div><span class="card-kicker">02 / Museums</span><h3>Rooms to remember</h3><p>Compare catalog presence with saves and selected itinerary stops.</p></article>
+          <article class="place-card"><div class="place-art art-photo"><img src="assets/golden-temple.jpg" alt="The Golden Temple and surrounding water in Amritsar" width="698" height="400" loading="lazy"></div><span class="card-kicker">03 / Religious sites</span><h3>Places of meaning</h3><p>Explore living heritage and see how religious sites appear in planned stops.</p></article>
+          <article class="place-card"><div class="place-art art-photo"><img src="assets/local-food.jpg" alt="Indian meal with curries, rice, bread, and snacks" width="646" height="473" loading="lazy"></div><span class="card-kicker">04 / Food experiences</span><h3>Local flavor, local context</h3><p>Make room for food experiences in a schedule that respects time and budget.</p></article>
+        </div>
+      </section>
+
+      <section class="workflow section-pad" id="workflow">
+        <div class="workflow-panel"><div class="workflow-head"><h2>How CultureRoute works</h2><span>From a city to a route to its evidence</span></div><div class="steps"><div class="step"><b>1</b><h3>Pick your place</h3><p>Choose a city and browse the full attraction catalog.</p></div><div class="step"><b>2</b><h3>Shape the day</h3><p>Add your date, budget, available hours, stop count, and preferences.</p></div><div class="step"><b>3</b><h3>See the reasoning</h3><p>Compare feasible schedules and trace the numbers to source data.</p></div></div></div>
+      </section>
+
+      <section class="planner section-pad" id="planner">
+        <div class="section-heading"><div><p class="eyebrow">02 / Plan and compare</p><h2>Two ways to spend<br>one cultural day</h2></div><p>A Saturday Jaipur example from the project specification: 09:00 start, six-hour window, INR 1,000 budget, three distinct stops.</p></div>
+        <div class="plan-grid"><article class="plan-card"><div class="plan-top"><span>Plan A</span><strong>Fastest plan</strong></div><div class="plan-number">3h 27m</div><p>Elapsed time</p><div class="plan-details"><span><b>1</b> cultural stop</span><span><b>₹585.46</b> entry + travel</span><span><b>1.806 kg</b> estimated between-stop carbon</span></div></article><article class="plan-card featured-plan"><div class="plan-top"><span>Plan B</span><strong>Most cultural stops</strong></div><div class="plan-number">3h 47m</div><p>Elapsed time</p><div class="plan-details"><span><b>2</b> cultural stops</span><span><b>₹638.30</b> entry + travel</span><span><b>2.840 kg</b> estimated between-stop carbon</span></div><span class="plan-tag">+1 cultural stop</span></article></div>
+        <p class="caption">Illustrative baseline from the specification. Plans depend on recorded directed travel legs; the planner does not cover every catalog attraction. Carbon is an estimate.</p>
+      </section>
+
+      <section class="insights section-pad" id="insights"><div class="insight-lead"><p class="eyebrow">03 / Insights and predictions</p><h2>Ask better questions<br>of the numbers.</h2><p>Cultural attractions are 31.3% of listings, 31.3% of matched interactions, and 30.1% of selected planned stops in the specified study. Each share uses its own denominator.</p><div class="chip-row"><span>Chart</span><span>Table</span><span>How calculated</span></div></div><div class="insight-card"><div class="insight-card-top"><span>Culture in three views</span><span>Study baseline</span></div><div class="bar-row"><span>Listings</span><div class="bar"><i style="width:31.3%"></i></div><strong>31.3%</strong></div><div class="bar-row"><span>Interactions</span><div class="bar"><i style="width:31.3%"></i></div><strong>31.3%</strong></div><div class="bar-row"><span>Planned stops</span><div class="bar"><i style="width:30.1%"></i></div><strong>30.1%</strong></div><p>These are separate populations. A chart in the application must show numerator, denominator, filters, and source cutoff.</p></div></section>
+
+      <section class="lab section-pad" id="lab"><div class="lab-header"><p class="eyebrow">04 / The evaluator's desk</p><h2>Open the data.<br><em>Trace the answer.</em></h2><p>Inspect raw tables, run guided transformations or read-only SQL, and compare before and after. The DEV Lab makes the method visible alongside the result.</p></div><div class="lab-cards"><article><span class="mini-no">01</span><h3>Inspect</h3><p>See fields, row counts, missing values, and the selected source or prepared view.</p></article><article><span class="mini-no">02</span><h3>Transform</h3><p>Filter, derive, group, pivot, merge, or run a bounded read-only query.</p></article><article><span class="mini-no">03</span><h3>Explain</h3><p>Show the command, before/after tables, matching counts, chart, and export.</p></article></div><div class="lab-note"><span class="sticky-mini">A verified example</span><p>Saved-versus-planned attraction join: <b>352</b> matches, <b>11</b> saved only, <b>303</b> planned only in the full outer result.</p></div></section>
+
+      <section class="purpose section-pad"><h2>Built around a research question</h2><p>How does the representation of heritage sites, museums, religious sites, and food experiences differ across attraction listings, online interactions, and planned stops?</p><div class="purpose-note"><span>SDG 8.9 / Sustainable tourism</span><p>CultureRoute supports discovery of local culture. Its synthetic data cannot measure real visits, spending, employment, or economic impact.</p></div></section>
+
+      <section class="faq section-pad" aria-labelledby="faq-title"><div><p class="eyebrow">Good to know</p><h2 id="faq-title">A few useful<br>questions <span class="faq-mark">?</span></h2></div><div class="faq-list"><details><summary>Is this a live trip-booking service?</summary><p>No. This is a visual concept for an exploratory planning and analysis website. It does not book attractions or use live prices.</p></details><details><summary>Does every attraction have a route leg?</summary><p>No. Each city lists 15 attractions, while the recorded travel matrix covers 10. The planner should flag coverage gaps and only use recorded directed legs.</p></details><details><summary>Are the study results real-world tourism measures?</summary><p>No. Both source packs are synthetic. The reported shares describe those data, not actual visits or economic outcomes.</p></details><details><summary>What will the DEV Lab show?</summary><p>The specified design includes source rows, prepared views, guided transformations, bounded read-only SQL, charts, calculations, and exports.</p></details></div></section>
+
+      <section class="closing section-pad"><svg viewBox="0 0 95 95" aria-hidden="true"><path d="m47 4 9 31 31-18-19 29 25 13-31 2 7 31-23-23-24 22 8-31L3 48l31-6L26 12l22 24Z"/></svg><h2>Make room for<br><em>culture in the day.</em></h2><p>Start with a city, shape a feasible route, and see the data behind every comparison.</p><div class="closing-actions"><a class="button button-primary" href="#discover">Explore the concept <span aria-hidden="true">↗</span></a><a class="text-link" href="#lab">View DEV Lab concept <span aria-hidden="true">→</span></a></div></section>
+    </main>
+    <footer class="footer"><div><a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">✳</span> Culture<span>Route</span></a><p>A CultureRoute DEV AAT UI concept using synthetic study data.</p></div><div><strong>Explore</strong><a href="#discover">Discover</a><a href="#planner">Plan a day</a><a href="#insights">Insights</a><a href="#lab">DEV Lab</a></div><div><strong>Project</strong><a href="#about">Overview</a><a href="#workflow">Workflow</a><a href="#top">Back to top ↑</a></div><p class="footer-bottom">CultureRoute / Visual prototype / 2026</p></footer>
+  </div>
+</body>
+</html>
