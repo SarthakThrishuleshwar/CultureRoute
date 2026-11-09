@@ -2179,10 +2179,10 @@ elif view_mode == "Information":
         st.latex(r"\ln(\lambda_{i,t}) = \beta_0 + \sum_{c=1}^{44} \beta_c \cdot \mathbb{I}(\text{city}=c) + \beta_{\text{lag1}} y_{i,t-1} + \beta_{\text{lag2}} y_{i,t-2} + \beta_{\text{4w}} \bar{y}_{i,t-4:t-1}")
         st.latex(r"\lambda_{i,t} = \exp\left(\beta_0 + \mathbf{x}_{i,t}^\top \boldsymbol{\beta}\right)")
         
-        st.markdown(r"""
+        st.markdown("""
         **Why Poisson over Ordinary Least Squares (OLS)?**
-        - **Non-Negative Discrete Support:** Interaction counts are non-negative integers ($y \ge 0$). OLS assumes unbounded Gaussian errors and routinely predicts impossible negative counts ($\hat{y} < 0$).
-        - **Mean-Variance Relationship:** In count telemetry, variance scales with mean volume ($\mathrm{Var}(Y) = \mathbb{E}[Y] = \lambda$). Linear regression incorrectly assumes constant homoscedastic variance.
+        - **Non-Negative Discrete Support:** Interaction counts are non-negative integers (<em>y</em> &ge; 0). OLS assumes unbounded Gaussian errors and routinely predicts impossible negative counts (<em>y&#770;</em> &lt; 0).
+        - **Mean-Variance Relationship:** In count telemetry, variance scales with mean volume (Var(<em>Y</em>) = E[<em>Y</em>] = &lambda;). Linear regression incorrectly assumes constant homoscedastic variance.
         
         **Out-of-Sample Validation & Performance:**
         - Tested on a strictly disjoint 12-week chronological holdout (Weeks 46..57, 540 rows).
@@ -2190,7 +2190,7 @@ elif view_mode == "Information":
         - On non-zero active weeks, error drops to **0.7786 MAE** vs 1.2101 for lag-1.
         
         **Exact 95% Confidence Bounds:**
-        """)
+        """, unsafe_allow_html=True)
         st.latex(r"\text{CI}_{95\%} = \left[ Q_{\text{Poisson}}(0.025; \lambda), \; Q_{\text{Poisson}}(0.975; \lambda) \right]")
 
         # Model 2
@@ -2223,7 +2223,7 @@ elif view_mode == "Information":
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.markdown(r"**Mathematical Formulation:** For positive crowd sizes $X_1, \dots, X_n > 0$, we model $\ln(X_i) \sim \mathcal{N}(\mu, \sigma^2)$:")
+        st.markdown("**Mathematical Formulation:** For positive crowd sizes <em>X</em><sub>1</sub>, &hellip;, <em>X<sub>n</sub></em> &gt; 0, we model log-transformed footfall ln(<em>X<sub>i</sub></em>) ~ <em>N</em>(&mu;, &sigma;<sup>2</sup>):", unsafe_allow_html=True)
         st.latex(r"\hat{\mu}_{\text{MLE}} = \frac{1}{n} \sum_{i=1}^n \ln(x_i) = 8.3312, \quad \hat{\sigma}_{\text{MLE}} = \sqrt{\frac{1}{n} \sum_{i=1}^n (\ln(x_i) - \hat{\mu})^2} = 0.7188")
         st.latex(r"\mathbb{E}[X] = \exp\left(\hat{\mu} + \frac{\hat{\sigma}^2}{2}\right) = \exp(8.3312 + 0.2583) \approx 4,863.6 \text{ visitors}")
         st.latex(r"\text{Median}(X) = \exp(\hat{\mu}) = \exp(8.3312) \approx 4,151.4 \text{ visitors}")
@@ -2243,11 +2243,11 @@ elif view_mode == "Information":
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.markdown(r"**Comparative Framework:** Investigates cultural stop conversion proportion $p$ ($n = 411$ trips, $k = 211$ successes, empirical $\hat{p} = 0.5134$):")
+        st.markdown("**Comparative Framework:** Investigates cultural stop conversion proportion <em>p</em> (<em>n</em> = 411 trips, <em>k</em> = 211 successes, empirical <em>p&#770;</em> = 0.5134):", unsafe_allow_html=True)
         st.latex(r"w = \frac{\hat{p} + \frac{z^2}{2n} \pm z\sqrt{\frac{\hat{p}(1-\hat{p})}{n} + \frac{z^2}{4n^2}}}{1 + \frac{z^2}{n}} \implies [0.4650, \; 0.5615]")
         st.latex(r"\text{Prior } p \sim \text{Beta}(1, 1) \implies \text{Posterior } p \mid k \sim \text{Beta}(1 + 211, \; 1 + 200) = \text{Beta}(212, 201)")
         st.latex(r"\text{Posterior Mean: } \frac{212}{413} = 0.5133, \quad 95\% \text{ Equal-Tailed Credible Interval: } [0.4650, \; 0.5613]")
-        st.markdown("Demonstrates how classical Wilson intervals and uninformative Bayesian credible intervals converge when sample sizes exceed $n > 400$.")
+        st.markdown("Demonstrates how classical Wilson intervals and uninformative Bayesian credible intervals converge when sample sizes exceed <em>n</em> &gt; 400.", unsafe_allow_html=True)
 
         # Model 5
         st.markdown("""
@@ -2260,7 +2260,7 @@ elif view_mode == "Information":
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.markdown("**Mathematical Formulation:** Over directed graph $G = (V, E)$ where vertices $V$ are city attractions and edges $E$ are recorded travel matrix legs:")
+        st.markdown("**Mathematical Formulation:** Over directed graph <em>G = (V, E)</em> where vertices <em>V</em> are city attractions and edges <em>E</em> are recorded travel matrix legs:", unsafe_allow_html=True)
         st.latex(r"\text{Plan A (Min Elapsed Time):} \quad \min_{\pi} \sum_{i=1}^k \text{duration}(v_{\pi(i)}) + \sum_{i=1}^{k-1} \text{travel\_time}(v_{\pi(i)}, v_{\pi(i+1)})")
         st.latex(r"\text{Plan B (Max Cultural Stops):} \quad \max_{\pi} \sum_{i=1}^k \mathbb{I}(v_{\pi(i)} \in \text{Cultural}), \quad \text{tie-breaker: } \min \text{elapsed\_time}")
         st.latex(r"\text{Subject to Hard Constraints: } \sum \text{cost} \le \text{Budget}, \; \text{arrival}(v_i) \ge \text{opens}(v_i), \; \text{depart}(v_i) \le \text{closes}(v_i)")

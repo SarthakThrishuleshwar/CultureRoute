@@ -250,27 +250,29 @@ def render_model_screen() -> None:
 
         f_col1, f_col2 = st.columns([1.2, 0.8])
         with f_col1:
-            st.markdown(r"""
-            <div style="background: #ffffff; border: 1.5px solid var(--line); padding: 22px 24px; box-shadow: 3px 3px 0 rgba(41,41,37,0.06); margin-bottom: 20px;">
+            st.markdown("""
+            <div style="background: #ffffff; border: 1.5px solid var(--line); padding: 22px 24px; box-shadow: 3px 3px 0 rgba(41,41,37,0.06); margin-bottom: 16px;">
                 <div style="font-family: var(--display); font-size: 1.15rem; color: var(--ink); margin-bottom: 10px;">
-                    Generalized Linear Model · Poisson Regression
+                    Generalized Linear Model &middot; Poisson Regression
                 </div>
                 <div style="font-size: 0.86rem; color: var(--ink); line-height: 1.65;">
-                    The target variable $Y_{i,t}$ represents the integer count of cultural interactions in city $i$ during week $t$.
-                    Because interaction counts are discrete and nonnegative ($y \in \{0, 1, 2, \dots\}$), standard Ordinary Least Squares (OLS)
+                    The target variable <strong>Y<sub>i,t</sub></strong> represents the integer count of cultural interactions in city <em>i</em> during week <em>t</em>.
+                    Because interaction counts are discrete and nonnegative (<em>y</em> &isin; {0, 1, 2, &hellip;}), standard Ordinary Least Squares (OLS)
                     is statistically inappropriate:
                     <ul style="margin: 8px 0; padding-left: 20px;">
-                        <li>OLS assumes Gaussian errors: $Y \sim \mathcal{N}(\mu, \sigma^2)$, violating the nonnegative integer support.</li>
-                        <li>OLS can predict negative counts ($\hat{y} < 0$), which have no physical meaning in tourism engagement.</li>
-                        <li>Count data exhibits variance proportional to the mean (Poisson property: $\mathrm{Var}(Y) = \mathbb{E}[Y] = \lambda$).</li>
+                        <li><strong>Nonnegative integer support:</strong> OLS assumes Gaussian errors <em>Y ~ N(&mu;, &sigma;<sup>2</sup>)</em>, violating discrete count bounds.</li>
+                        <li><strong>Negative count risk:</strong> OLS can predict negative counts (<em>y&#770; &lt; 0</em>), which have no physical meaning in tourism engagement.</li>
+                        <li><strong>Heteroskedasticity:</strong> Count variance scales with the mean (Poisson property: Var(<em>Y</em>) = E[<em>Y</em>] = &lambda;).</li>
                     </ul>
                     Therefore, we formulate a Generalized Linear Model (GLM) with a <strong>logarithmic link function</strong>:
-                    $$\ln(\mathbb{E}[Y_{i,t}]) = \ln(\lambda_{i,t}) = eta_0 + \mathbf{x}_{i,t}^	op oldsymbol{eta}$$
-                    $$\mathbb{E}[Y_{i,t}] = \lambda_{i,t} = \exp\left(eta_0 + \mathbf{x}_{i,t}^	op oldsymbol{eta}
-ight)$$
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+            st.markdown("**Logarithmic Link Formulation:**")
+            st.latex(r"\ln(\mathbb{E}[Y_{i,t}]) = \ln(\lambda_{i,t}) = \beta_0 + \mathbf{x}_{i,t}^\top \boldsymbol{\beta}")
+            st.markdown("**Expected Conditional Mean:**")
+            st.latex(r"\mathbb{E}[Y_{i,t}] = \lambda_{i,t} = \exp\left(\beta_0 + \mathbf{x}_{i,t}^\top \boldsymbol{\beta}\right)")
 
         with f_col2:
             st.markdown("""
@@ -372,19 +374,19 @@ ight)$$
                     <tr style="border-bottom: 1px solid #e0dbce;">
                         <td style="padding: 8px;"><code>lag_1</code></td>
                         <td style="padding: 8px;">Integer Count (&ge; 0)</td>
-                        <td style="padding: 8px;">Interaction count in immediate prior week: $y_{i, t-1}$</td>
+                        <td style="padding: 8px;">Interaction count in immediate prior week: <code>y<sub>i, t&minus;1</sub></code></td>
                         <td style="padding: 8px;">Shifted by +1 week prior to joining</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #e0dbce;">
                         <td style="padding: 8px;"><code>lag_2</code></td>
                         <td style="padding: 8px;">Integer Count (&ge; 0)</td>
-                        <td style="padding: 8px;">Interaction count two weeks prior: $y_{i, t-2}$</td>
+                        <td style="padding: 8px;">Interaction count two weeks prior: <code>y<sub>i, t&minus;2</sub></code></td>
                         <td style="padding: 8px;">Shifted by +2 weeks prior to joining</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px;"><code>trailing_4w_mean</code></td>
                         <td style="padding: 8px;">Continuous (&ge; 0.0)</td>
-                        <td style="padding: 8px;">Rolling 4-week mean: $\\frac{1}{4} \\sum_{k=1}^4 y_{i, t-k}$</td>
+                        <td style="padding: 8px;">Rolling 4-week mean: <code>&frac14; &sum;<sub>k=1..4</sub> y<sub>i, t&minus;k</sub></code></td>
                         <td style="padding: 8px;">Shifted before rolling; requires 4 full history weeks</td>
                     </tr>
                 </tbody>
