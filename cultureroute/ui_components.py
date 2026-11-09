@@ -121,6 +121,42 @@ def inject_editorial_css() -> None:
        SIDEBAR THEME & CONTROLS: COLLAPSIBLE MINI-RAIL & EXPANDED VIEWS
        ========================================================================= */
 
+    /* Completely eliminate sidebar scrolling and hide scrollbars */
+    [data-testid="stSidebar"],
+    section[data-testid="stSidebar"],
+    [data-testid="stSidebarContent"],
+    [data-testid="stSidebarUserContent"] {{
+        overflow: hidden !important;
+        overflow-y: hidden !important;
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+    }}
+
+    [data-testid="stSidebarContent"]::-webkit-scrollbar,
+    [data-testid="stSidebarUserContent"]::-webkit-scrollbar,
+    section[data-testid="stSidebar"]::-webkit-scrollbar {{
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+    }}
+
+    /* Eliminate Streamlit's default 96px bottom padding on sidebar */
+    [data-testid="stSidebarUserContent"] {{
+        padding-bottom: 8px !important;
+        padding-top: 0 !important;
+    }}
+
+    /* Hide empty logo spacer & shrink header to prevent height waste */
+    [data-testid="stLogoSpacer"] {{
+        display: none !important;
+    }}
+    [data-testid="stSidebarHeader"] {{
+        padding: 4px 10px 0 !important;
+        min-height: 0 !important;
+        height: 24px !important;
+        margin-bottom: 2px !important;
+    }}
+
     /* Expanded Sidebar: 260px width with rich branding and full navigation */
     [data-testid="stSidebar"],
     section[data-testid="stSidebar"] {{
@@ -404,18 +440,19 @@ def inject_editorial_css() -> None:
 
 
     .cr-sidebar-brand {{
-        padding: 6px 0 16px;
-        border-bottom: 2px solid var(--line);
-        margin-bottom: 16px;
+        padding: 2px 0 8px;
+        border-bottom: 1.5px solid var(--line);
+        margin-bottom: 8px;
     }}
 
     .cr-brand-title {{
         font-family: var(--display);
-        font-size: 1.85rem;
+        font-size: 1.45rem;
         font-weight: 500;
-        letter-spacing: -0.06em;
+        letter-spacing: -0.05em;
         line-height: 1.1;
         color: var(--ink);
+        margin: 0;
     }}
 
     .cr-brand-title span {{
@@ -424,28 +461,28 @@ def inject_editorial_css() -> None:
 
     .cr-brand-subtitle {{
         font-family: var(--body);
-        font-size: 0.72rem;
+        font-size: 0.65rem;
         font-weight: 700;
         color: var(--muted);
         text-transform: uppercase;
-        letter-spacing: 0.12em;
-        margin-top: 4px;
+        letter-spacing: 0.08em;
+        margin-top: 2px;
     }}
 
     .cr-nav-group {{
-        margin-bottom: 16px;
+        margin-bottom: 6px;
     }}
 
     .cr-nav-group-title {{
         font-family: var(--body);
-        font-size: 0.68rem;
+        font-size: 0.60rem;
         font-weight: 700;
-        letter-spacing: 0.14em;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
         color: var(--muted);
-        padding: 0 4px 6px;
+        padding: 0 4px 2px;
         border-bottom: 1px solid rgba(182, 175, 163, 0.4);
-        margin-bottom: 6px;
+        margin-bottom: 2px;
     }}
 
     /* High Specificity: Strip default blue link colors and underlines from sidebar */
@@ -459,16 +496,17 @@ def inject_editorial_css() -> None:
     .cr-nav-link {{
         display: flex !important;
         align-items: center !important;
-        gap: 12px !important;
-        padding: 9px 12px !important;
-        margin: 4px 0 !important;
+        gap: 8px !important;
+        padding: 5px 10px !important;
+        margin: 1px 0 !important;
         text-decoration: none !important;
         color: var(--ink) !important;
         font-family: var(--display) !important;
-        font-size: 1.04rem !important;
+        font-size: 0.88rem !important;
+        line-height: 1.25 !important;
         font-weight: 500 !important;
         letter-spacing: -0.02em !important;
-        border-radius: 3px !important;
+        border-radius: 4px !important;
         border: 1px solid transparent !important;
         border-bottom: 1px dashed var(--line) !important;
         background-color: transparent !important;
@@ -1477,10 +1515,10 @@ def render_sidebar_navigation(active_view: str) -> None:
 
     html += """
     </nav>
-    <div class="sticky" style="background: #eee3a6; padding: 16px 14px 14px; font-family: 'Segoe Print', 'Comic Sans MS', 'Trebuchet MS', cursive; font-size: 0.78rem; line-height: 1.45; color: #292925; transform: rotate(-1.5deg); position: relative; margin: 25px 4px 15px; box-shadow: 2px 4px 8px rgba(50, 43, 28, 0.12); border: 1px solid #dfd6a8;">
-        <span class="tape" style="position: absolute; width: 55px; height: 16px; background: rgba(237, 230, 194, 0.8); top: -8px; left: 50%; transform: translateX(-50%) rotate(2deg);"></span>
-        <div style="font-size: 0.70rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #982b32; margin-bottom: 4px;">Study Data Boundary</div>
-        <p style="margin: 0; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; font-size: 0.76rem; color: #292925;">
+    <div class="sticky" style="background: #eee3a6; padding: 8px 10px; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; font-size: 0.70rem; line-height: 1.3; color: #292925; transform: rotate(-1deg); position: relative; margin: 8px 2px 4px; box-shadow: 1px 2px 5px rgba(50, 43, 28, 0.10); border: 1px solid #dfd6a8;">
+        <span class="tape" style="position: absolute; width: 36px; height: 10px; background: rgba(237, 230, 194, 0.8); top: -5px; left: 50%; transform: translateX(-50%) rotate(1.5deg);"></span>
+        <div style="font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #982b32; margin-bottom: 2px;">Study Data Boundary</div>
+        <p style="margin: 0; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; font-size: 0.68rem; line-height: 1.25; color: #292925;">
             Read-only SmartTrip & WanderMatch packs. 45 Indian cities. Zero external network calls.
         </p>
     </div>
