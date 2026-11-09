@@ -88,13 +88,13 @@ def inject_editorial_css() -> None:
         line-height: 1.55;
     }}
 
-    /* Hide Deploy button and Streamlit menu clutter without destroying the sidebar expand trigger */
+    /* Hide Deploy button and Streamlit menu clutter while preserving sidebar collapse and expand buttons */
     .stDeployButton,
     [data-testid="stDeployButton"],
     .stAppDeployButton,
     [data-testid="stAppDeployButton"],
     button[data-testid="stAppDeployButton"],
-    button[kind="header"],
+    .stToolbarActions,
     [data-testid="stToolbarActions"],
     [data-testid="stHeaderActionElements"],
     [data-testid="stDecoration"],
@@ -112,83 +112,64 @@ def inject_editorial_css() -> None:
     header[data-testid="stHeader"],
     [data-testid="stHeader"] {{
         background: transparent !important;
-        height: 0 !important;
-        min-height: 0 !important;
         border: none !important;
         box-shadow: none !important;
+        z-index: 99999 !important;
     }}
 
-    /* Pinned and permanent sidebar on desktop screens (>= 769px) */
-    @media (min-width: 769px) {{
-        [data-testid="stSidebar"],
-        section[data-testid="stSidebar"] {{
-            position: relative !important;
-            transform: none !important;
-            margin-left: 0 !important;
-            width: 290px !important;
-            min-width: 290px !important;
-            max-width: 290px !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            box-shadow: 2px 0 12px rgba(41, 41, 37, 0.06) !important;
-        }}
-
-        [data-testid="stSidebar"] > div {{
-            width: 290px !important;
-            min-width: 290px !important;
-            transform: none !important;
-        }}
-
-        [data-testid="stAppViewContainer"] {{
-            margin-left: 0 !important;
-        }}
-
-        [data-testid="stExpandSidebarButton"] {{
-            display: none !important;
-        }}
+    /* Sidebar Theme & Controls (fully supporting native open/close toggle) */
+    [data-testid="stSidebar"],
+    section[data-testid="stSidebar"] {{
+        background-color: #f0ebe0 !important;
+        border-right: 1.5px solid var(--line) !important;
+        box-shadow: 2px 0 12px rgba(41, 41, 37, 0.06) !important;
     }}
 
-    /* Tactile floating navigation toggle on smaller screens or when collapsed */
+    /* Sidebar Collapse Button (inside sidebar header) */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapseButton"] button {{
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: var(--yellow) !important;
+        color: var(--red) !important;
+        border: 1.5px solid var(--red) !important;
+        border-radius: 4px !important;
+        box-shadow: 2px 2px 0 var(--red) !important;
+        cursor: pointer !important;
+        transition: all 0.15s ease !important;
+    }}
+    [data-testid="stSidebarCollapseButton"] button:hover {{
+        background-color: #fffaf0 !important;
+        transform: translate(1px, 1px) !important;
+        box-shadow: 1px 1px 0 var(--red) !important;
+    }}
+
+    /* Sidebar Expand Button (visible when sidebar is closed) */
     [data-testid="stExpandSidebarButton"],
     button[data-testid="stExpandSidebarButton"],
     [data-testid="stSidebarCollapsedControl"] {{
-        display: flex !important;
+        display: inline-flex !important;
         visibility: visible !important;
         opacity: 1 !important;
-        position: fixed !important;
-        top: 14px !important;
-        left: 14px !important;
-        z-index: 9999999 !important;
         background-color: var(--yellow) !important;
         color: var(--red) !important;
         border: 2px solid var(--red) !important;
         border-radius: 4px !important;
-        box-shadow: 3px 3px 0 var(--red) !important;
-        padding: 8px 14px !important;
+        box-shadow: 2px 2px 0 var(--red) !important;
+        padding: 6px 12px !important;
         font-family: var(--display) !important;
-        font-size: 0.95rem !important;
+        font-size: 0.9rem !important;
         font-weight: 700 !important;
         cursor: pointer !important;
-        align-items: center !important;
-        gap: 8px !important;
-        pointer-events: auto !important;
-        width: auto !important;
-        height: auto !important;
+        z-index: 999999 !important;
+        transition: all 0.15s ease !important;
     }}
-
-    [data-testid="stExpandSidebarButton"]:hover {{
-        background-color: #fff9ee !important;
-        transform: translate(2px, 2px) !important;
+    [data-testid="stExpandSidebarButton"]:hover,
+    button[data-testid="stExpandSidebarButton"]:hover {{
+        background-color: #fffaf0 !important;
+        transform: translate(1px, 1px) !important;
         box-shadow: 1px 1px 0 var(--red) !important;
-    }}
-
-    [data-testid="stExpandSidebarButton"]:after {{
-        content: " Navigation Menu" !important;
-        font-family: var(--display) !important;
-        font-size: 0.92rem !important;
-        font-weight: 700 !important;
-        color: var(--red) !important;
     }}
 
     /* Flat Paper Surface (Dot texture removed per Stage F1) */
