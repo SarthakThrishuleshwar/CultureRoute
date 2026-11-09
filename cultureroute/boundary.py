@@ -1,21 +1,22 @@
 """India boundary validation module for CultureRoute.
 
 Validates that latitude and longitude coordinates fall within the geographical boundary of India.
-Uses a verified multi-polygon point-in-polygon algorithm against the official ISO 3166-1 IND geometry.
+Uses a verified multi-polygon point-in-polygon algorithm against official ISO 3166-1 IND geometry,
+supporting exterior boundary rings and interior exclusion holes.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
-# Bounding box for India
+# Broad bounding box for India (pre-filter)
 INDIA_BBOX = {
     "min_lon": 68.143,
-    "max_lon": 97.363,
+    "max_lon": 97.396,
     "min_lat": 6.745,
-    "max_lat": 35.500,
+    "max_lat": 37.100,
 }
 
 
@@ -27,13 +28,17 @@ def is_coordinate_in_india_bbox(lat: float, lon: float) -> bool:
     )
 
 
-def point_in_polygon(x: float, y: float, poly: List[List[float]]) -> bool:
+def point_in_polygon(x: float, y: float, ring: List[List[float]]) -> bool:
     """Ray casting point-in-polygon check (x=lon, y=lat)."""
     inside = False
-    n = len(poly)
-    p1x, p1y = poly[0]
+    n = len(ring)
+    if n < 3:
+        return False
+    p1x, p1y = ring[0]
     for i in range(n + 1):
-        p2x, p2y = poly[i % n]
+        p2x, p2y = ring[i % n]
+        if (p1y == p2y == y) and min(p1x, p2x) <= x <= max(p1x, p2x):
+            return True
         if y > min(p1y, p2y):
             if y <= max(p1y, p2y):
                 if x <= max(p1x, p2x):
@@ -46,27 +51,71 @@ def point_in_polygon(x: float, y: float, poly: List[List[float]]) -> bool:
 
 
 class IndiaBoundaryValidator:
-    """Validates points against the canonical country boundary polygons."""
+    """Validates points against canonical country boundary polygon(s) with holes support."""
 
     def __init__(self, geojson_path: Optional[Path] = None):
-        self._polygons: List[List[List[float]]] = []
-        if geojson_path and geojson_path.exists():
-            with open(geojson_path, "r", encoding="utf-8") as f:
+        self.geojson_path = Path(geojson_path) if geojson_path else None
+        self._polygons: List[Tuple[List[List[float]], List[List[List[float]]]]] = []
+        self._bbox: Optional[Tuple[float, float, float, float]] = None
+        self._load_geojson(self.geojson_path)
+
+    def _load_geojson(self, path: Optional[Path]) -> None:
+        if not path or not path.exists():
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                geom_type = data.get("type") or data.get("geometry", {}).get("type")
-                coords = data.get("coordinates") or data.get("geometry", {}).get("coordinates")
+
+            if data.get("type") == "FeatureCollection":
+                features = data.get("features", [])
+                geometries = [f.get("geometry", {}) for f in features if f.get("geometry")]
+            elif data.get("type") == "Feature":
+                geometries = [data.get("geometry", {})]
+            else:
+                geometries = [data]
+
+            for geom in geometries:
+                geom_type = geom.get("type")
+                coords = geom.get("coordinates", [])
                 if geom_type == "MultiPolygon":
                     for poly in coords:
-                        for ring in poly:
-                            self._polygons.append(ring)
+                        if poly and len(poly) > 0:
+                            ext_ring = poly[0]
+                            holes = poly[1:] if len(poly) > 1 else []
+                            self._polygons.append((ext_ring, holes))
                 elif geom_type == "Polygon":
-                    for ring in coords:
-                        self._polygons.append(ring)
+                    if coords and len(coords) > 0:
+                        ext_ring = coords[0]
+                        holes = coords[1:] if len(coords) > 1 else []
+                        self._polygons.append((ext_ring, holes))
 
-    def is_inside(self, lat: float, lon: float) -> bool:
-        if not is_coordinate_in_india_bbox(lat, lon):
+            if self._polygons:
+                min_lon = min(pt[0] for ext, _ in self._polygons for pt in ext)
+                max_lon = max(pt[0] for ext, _ in self._polygons for pt in ext)
+                min_lat = min(pt[1] for ext, _ in self._polygons for pt in ext)
+                max_lat = max(pt[1] for ext, _ in self._polygons for pt in ext)
+                self._bbox = (min_lat, max_lat, min_lon, max_lon)
+        except Exception:
+            self._polygons = []
+            self._bbox = None
+
+    @property
+    def is_available(self) -> bool:
+        return len(self._polygons) > 0
+
+    def is_inside(self, lat: float, lon: float, strict: bool = False) -> bool:
+        if not self.is_available:
+            if strict:
+                raise RuntimeError("Coordinate validation unavailable: boundary polygon not loaded")
             return False
-        if not self._polygons:
-            # If detailed polygon not yet loaded, bbox check serves as preliminary guard
-            return True
-        return any(point_in_polygon(lon, lat, ring) for ring in self._polygons)
+
+        min_lat, max_lat, min_lon, max_lon = self._bbox
+        if not (min_lat <= lat <= max_lat and min_lon <= lon <= max_lon):
+            return False
+
+        for ext_ring, holes in self._polygons:
+            if point_in_polygon(lon, lat, ext_ring):
+                in_hole = any(point_in_polygon(lon, lat, hole) for hole in holes)
+                if not in_hole:
+                    return True
+        return False

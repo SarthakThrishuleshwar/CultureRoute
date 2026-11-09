@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="goldGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff9ee"/>
+      <stop offset="100%" stop-color="#eee3a6"/>
+    </radialGradient>
+  </defs>
+  <!-- Base Emblem in Oxblood with Gold Double Border -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#982b32" stroke="#eee3a6" stroke-width="4"/>
+  <rect x="9" y="9" width="110" height="110" rx="23" fill="none" stroke="#eee3a6" stroke-width="1.2" opacity="0.6"/>
+  
+  <!-- 8-Point Navigational Compass Rose -->
+  <!-- North pointer -->
+  <polygon points="64,18 69,59 64,64" fill="#f7f3e9"/>
+  <polygon points="64,18 59,59 64,64" fill="#eee3a6"/>
+  <!-- South pointer -->
+  <polygon points="64,106 69,69 64,64" fill="#eee3a6"/>
+  <polygon points="64,106 59,69 64,64" fill="#f7f3e9"/>
+  <!-- East pointer -->
+  <polygon points="108,64 69,69 64,64" fill="#eee3a6"/>
+  <polygon points="108,64 69,59 64,64" fill="#f7f3e9"/>
+  <!-- West pointer -->
+  <polygon points="20,64 59,69 64,64" fill="#f7f3e9"/>
+  <polygon points="20,64 59,59 64,64" fill="#eee3a6"/>
+  
+  <!-- Corner Points (NE, SE, SW, NW) -->
+  <polygon points="94,34 68,57 64,64" fill="#eee3a6"/>
+  <polygon points="94,34 64,64 60,60" fill="#f7f3e9"/>
+  <polygon points="94,94 67,68 64,64" fill="#f7f3e9"/>
+  <polygon points="94,94 64,64 68,60" fill="#eee3a6"/>
+  <polygon points="34,94 60,67 64,64" fill="#eee3a6"/>
+  <polygon points="34,94 64,64 68,68" fill="#f7f3e9"/>
+  <polygon points="34,34 60,60 64,64" fill="#f7f3e9"/>
+  <polygon points="34,34 64,64 60,68" fill="#eee3a6"/>
+  
+  <!-- Center Core Waypoint -->
+  <circle cx="64" cy="64" r="14" fill="#982b32" stroke="#eee3a6" stroke-width="3"/>
+  <circle cx="64" cy="64" r="6" fill="#eee3a6"/>
+  
+  <!-- Spire Finial at North tip -->
+  <circle cx="64" cy="14" r="3.5" fill="#eee3a6"/>
+  <line x1="64" y1="14" x2="64" y2="18" stroke="#eee3a6" stroke-width="2"/>
+  
+  <!-- Base Itinerary Arc with 3 Waypoint Nodes -->
+  <path d="M 28,114 Q 64,124 100,114" fill="none" stroke="#eee3a6" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="36" cy="115.5" r="3" fill="#f7f3e9" stroke="#982b32" stroke-width="1"/>
+  <circle cx="64" cy="119" r="3.5" fill="#eee3a6" stroke="#982b32" stroke-width="1"/>
+  <circle cx="92" cy="115.5" r="3" fill="#f7f3e9" stroke="#982b32" stroke-width="1"/>
+</svg>

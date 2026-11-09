@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -279,8 +280,18 @@ def verify_and_audit_study() -> AuditReport:
         )
 
 
-def get_study_cities() -> List[Dict]:
-    """Retrieve the 45 Indian study cities with basic metadata."""
+@lru_cache(maxsize=1)
+def _cached_study_cities_tuple() -> tuple:
+    from cultureroute.study_db import DEFAULT_STUDY_DB, open_study_cache
+    if DEFAULT_STUDY_DB.exists():
+        with open_study_cache() as conn:
+            rows = conn.execute("""
+                SELECT city_id, name, state, lat, lng, timezone, population, primary_language
+                FROM cities
+                WHERE country_code = 'IN'
+                ORDER BY name ASC
+            """).fetchall()
+            return tuple(dict(r) for r in rows)
     with open_study_databases() as (smart, _):
         rows = smart.execute("""
             SELECT city_id, name, state, lat, lng, timezone, population, primary_language
@@ -288,20 +299,46 @@ def get_study_cities() -> List[Dict]:
             WHERE country_code = 'IN'
             ORDER BY name ASC
         """).fetchall()
-        return [dict(r) for r in rows]
+        return tuple(dict(r) for r in rows)
 
 
-def get_city_attractions(city_id: str) -> List[Dict]:
-    """Retrieve the 15 attractions for a study city, marking travel-matrix availability."""
+def get_study_cities() -> List[Dict]:
+    """Retrieve the 45 Indian study cities with basic metadata."""
+    return [dict(c) for c in _cached_study_cities_tuple()]
+
+
+@lru_cache(maxsize=128)
+def _cached_city_attractions_tuple(city_id: str) -> tuple:
+    from cultureroute.study_db import DEFAULT_STUDY_DB, open_study_cache
+    if DEFAULT_STUDY_DB.exists():
+        with open_study_cache() as conn:
+            matrix_origins = {
+                r[0] for r in conn.execute(
+                    "SELECT DISTINCT origin_poi_id FROM poi_travel_matrix WHERE origin_poi_id IN "
+                    "(SELECT poi_id FROM activities_poi WHERE city_id = ?)", (city_id,)
+                ).fetchall()
+            }
+            rows = conn.execute("""
+                SELECT poi_id, city_id, name, poi_category, lat, lng, typical_duration_minutes,
+                       entry_cost, currency, opens_at, closes_at, accessibility, description
+                FROM activities_poi
+                WHERE city_id = ?
+                ORDER BY name ASC
+            """, (city_id,)).fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                d["in_travel_matrix"] = d["poi_id"] in matrix_origins
+                results.append(d)
+            return tuple(results)
+
     with open_study_databases() as (smart, _):
-        # Query matrix origin coverage
         matrix_origins = {
             r[0] for r in smart.execute(
                 "SELECT DISTINCT origin_poi_id FROM poi_travel_matrix WHERE origin_poi_id IN "
                 "(SELECT poi_id FROM activities_poi WHERE city_id = ?)", (city_id,)
             ).fetchall()
         }
-
         rows = smart.execute("""
             SELECT poi_id, city_id, name, poi_category, lat, lng, typical_duration_minutes,
                    entry_cost, currency, opens_at, closes_at, accessibility, description
@@ -309,10 +346,14 @@ def get_city_attractions(city_id: str) -> List[Dict]:
             WHERE city_id = ?
             ORDER BY name ASC
         """, (city_id,)).fetchall()
-
         results = []
         for r in rows:
             d = dict(r)
             d["in_travel_matrix"] = d["poi_id"] in matrix_origins
             results.append(d)
-        return results
+        return tuple(results)
+
+
+def get_city_attractions(city_id: str) -> List[Dict]:
+    """Retrieve the 15 attractions for a study city, marking travel-matrix availability."""
+    return [dict(a) for a in _cached_city_attractions_tuple(city_id)]

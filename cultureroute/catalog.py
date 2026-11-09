@@ -49,7 +49,8 @@ class RealCatalogStore:
     """SQLite-backed spatial catalog for real-world Indian settlements and attractions."""
 
     def __init__(self, db_path: Path):
-        self.db_path = db_path
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -301,3 +302,23 @@ class RealCatalogStore:
             entry_fee=EntryFeeDetail.model_validate_json(r["entry_fee_json"]),
             accessibility=AccessibilityDetail.model_validate_json(r["accessibility_json"]),
         )
+
+    def get_all_states(self) -> List[str]:
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT DISTINCT state FROM settlements WHERE state IS NOT NULL AND state != '' ORDER BY state").fetchall()
+            return [r[0] for r in rows]
+
+    def get_breakdown_by_state_and_category(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute("""
+                SELECT state, cultural_category, count(*) as count
+                FROM places
+                GROUP BY state, cultural_category
+                ORDER BY state, count DESC
+            """).fetchall()
+            return [{"state": r["state"], "category": r["cultural_category"], "count": r["count"]} for r in rows]
+
+    def get_places_by_state(self, state: str) -> List[RealPlaceRecord]:
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM places WHERE state = ? ORDER BY name", (state,)).fetchall()
+            return [self._row_to_place(r) for r in rows]

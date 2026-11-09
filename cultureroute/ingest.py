@@ -125,6 +125,15 @@ CURATED_SETTLEMENTS = [
     # Disambiguation cases: Udaipur (Rajasthan vs Tripura)
     {"id": "SETTLE:IN:UDR_RJ", "name": "Udaipur", "state": "Rajasthan", "district": "Udaipur", "sub_district": "Girwa", "type": "city", "lat": 24.5854, "lon": 73.7125, "local": {"hi": "उदयपुर"}},
     {"id": "SETTLE:IN:UDR_TR", "name": "Udaipur", "state": "Tripura", "district": "Gomati", "sub_district": "Udaipur", "type": "town", "lat": 23.5333, "lon": 91.4833, "local": {"bn": "উদয়পুর"}},
+    # Extended coverage settlements outside the 45-city synthetic study:
+    {"id": "SETTLE:IN:KHJ", "name": "Khajuraho", "state": "Madhya Pradesh", "district": "Chhatarpur", "sub_district": "Rajnagar", "type": "town", "lat": 24.8510, "lon": 79.9199, "local": {"hi": "खजुराहो"}},
+    {"id": "SETTLE:IN:SAN", "name": "Sanchi", "state": "Madhya Pradesh", "district": "Raisen", "sub_district": "Gairatganj", "type": "town", "lat": 23.4810, "lon": 77.7397, "local": {"hi": "सांची"}},
+    {"id": "SETTLE:IN:TNJ", "name": "Thanjavur", "state": "Tamil Nadu", "district": "Thanjavur", "sub_district": "Thanjavur", "type": "city", "lat": 10.7870, "lon": 79.1378, "local": {"ta": "தஞ்சாவூர்"}},
+    {"id": "SETTLE:IN:MAM", "name": "Mamallapuram", "state": "Tamil Nadu", "district": "Chengalpattu", "sub_district": "Thirukalukundram", "type": "town", "lat": 12.6269, "lon": 80.1927, "local": {"ta": "மாமல்லபுரம்"}},
+    {"id": "SETTLE:IN:KNK", "name": "Konark", "state": "Odisha", "district": "Puri", "sub_district": "Gop", "type": "town", "lat": 19.8876, "lon": 86.0945, "local": {"or": "କୋଣାର୍କ"}},
+    {"id": "SETTLE:IN:OGO", "name": "Old Goa", "state": "Goa", "district": "North Goa", "sub_district": "Tiswadi", "type": "town", "lat": 15.5009, "lon": 73.9116, "local": {"kok": "पोरणें गोंय"}},
+    {"id": "SETTLE:IN:TAB", "name": "Tabo", "state": "Himachal Pradesh", "district": "Lahaul and Spiti", "sub_district": "Spiti", "type": "village", "lat": 32.0950, "lon": 78.3780, "local": {"hi": "ताबो"}},
+    {"id": "SETTLE:IN:SHR", "name": "Shravanabelagola", "state": "Karnataka", "district": "Hassan", "sub_district": "Channarayapatna", "type": "town", "lat": 12.8580, "lon": 76.4860, "local": {"kn": "ಶ್ರವಣಬೆಳಗೊಳ"}},
 ]
 
 
@@ -406,7 +415,191 @@ VERIFIED_CULTURAL_SITES = [
         "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
         "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
         "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
-    }
+    },
+    # Extended State 1 (Madhya Pradesh): Khajuraho Group of Monuments
+    {
+        "source_id": "WD:Q179732",
+        "upstream_type": "item",
+        "upstream_id": "Q179732",
+        "name": "Khajuraho Group of Monuments",
+        "local_names": {"hi": "खजुराहो स्मारक समूह"},
+        "latitude": 24.8519,
+        "longitude": 79.9199,
+        "state": "Madhya Pradesh",
+        "district": "Chhatarpur",
+        "sub_district": "Rajnagar",
+        "settlement_type": "town",
+        "cultural_category": CulturalCategory.HERITAGE,
+        "subcategory": "temple_complex",
+        "tags": {"historic": "monument", "heritage_designation": "UNESCO World Heritage Site"},
+        "source_url": "https://www.wikidata.org/wiki/Q179732",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
+    # Extended State 1 (Madhya Pradesh): Buddhist Monuments at Sanchi
+    {
+        "source_id": "WD:Q199874",
+        "upstream_type": "item",
+        "upstream_id": "Q199874",
+        "name": "Buddhist Monuments at Sanchi",
+        "local_names": {"hi": "सांची के बौद्ध स्मारक"},
+        "latitude": 23.4794,
+        "longitude": 77.7397,
+        "state": "Madhya Pradesh",
+        "district": "Raisen",
+        "sub_district": "Gairatganj",
+        "settlement_type": "town",
+        "cultural_category": CulturalCategory.HERITAGE,
+        "subcategory": "stupa",
+        "tags": {"historic": "monument", "heritage_designation": "UNESCO World Heritage Site"},
+        "source_url": "https://www.wikidata.org/wiki/Q199874",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
+    # Extended State 2 (Tamil Nadu): Brihadisvara Temple, Thanjavur
+    {
+        "source_id": "WD:Q839211",
+        "upstream_type": "item",
+        "upstream_id": "Q839211",
+        "name": "Brihadisvara Temple, Thanjavur",
+        "local_names": {"ta": "தஞ்சைப் பெருவுடையார் கோயில்", "hi": "बृहदीश्वर मन्दिर"},
+        "latitude": 10.7828,
+        "longitude": 79.1318,
+        "state": "Tamil Nadu",
+        "district": "Thanjavur",
+        "sub_district": "Thanjavur",
+        "settlement_type": "city",
+        "cultural_category": CulturalCategory.HERITAGE,
+        "subcategory": "chola_temple",
+        "tags": {"historic": "temple", "heritage_designation": "UNESCO World Heritage Site"},
+        "source_url": "https://www.wikidata.org/wiki/Q839211",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
+    # Extended State 2 (Tamil Nadu): Group of Monuments at Mahabalipuram
+    {
+        "source_id": "WD:Q1078426",
+        "upstream_type": "item",
+        "upstream_id": "Q1078426",
+        "name": "Group of Monuments at Mahabalipuram",
+        "local_names": {"ta": "மாமல்லபுர மரபுச்சின்னங்கள்"},
+        "latitude": 12.6167,
+        "longitude": 80.1917,
+        "state": "Tamil Nadu",
+        "district": "Chengalpattu",
+        "sub_district": "Thirukalukundram",
+        "settlement_type": "town",
+        "cultural_category": CulturalCategory.HERITAGE,
+        "subcategory": "shore_temple",
+        "tags": {"historic": "monument", "heritage_designation": "UNESCO World Heritage Site"},
+        "source_url": "https://www.wikidata.org/wiki/Q1078426",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
+    # Extended State 3 (Odisha): Sun Temple, Konark
+    {
+        "source_id": "WD:Q219985",
+        "upstream_type": "item",
+        "upstream_id": "Q219985",
+        "name": "Sun Temple, Konark",
+        "local_names": {"or": "କୋଣାର୍କ ସୂର୍ଯ୍ୟ ମନ୍ଦିର", "hi": "कोणार्क सूर्य मंदिर"},
+        "latitude": 19.8876,
+        "longitude": 86.0945,
+        "state": "Odisha",
+        "district": "Puri",
+        "sub_district": "Gop",
+        "settlement_type": "town",
+        "cultural_category": CulturalCategory.HERITAGE,
+        "subcategory": "chariot_temple",
+        "tags": {"historic": "temple", "heritage_designation": "UNESCO World Heritage Site"},
+        "source_url": "https://www.wikidata.org/wiki/Q219985",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
+    # Extended State 4 (Goa): Basilica of Bom Jesus, Old Goa
+    {
+        "source_id": "WD:Q4867451",
+        "upstream_type": "item",
+        "upstream_id": "Q4867451",
+        "name": "Basilica of Bom Jesus",
+        "local_names": {"kok": "बोम जेजुची बाझिलिका"},
+        "latitude": 15.5009,
+        "longitude": 73.9116,
+        "state": "Goa",
+        "district": "North Goa",
+        "sub_district": "Tiswadi",
+        "settlement_type": "town",
+        "cultural_category": CulturalCategory.HERITAGE,
+        "subcategory": "basilica",
+        "tags": {"historic": "church", "heritage_designation": "UNESCO World Heritage Site"},
+        "source_url": "https://www.wikidata.org/wiki/Q4867451",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
+    # Extended State 5 (Himachal Pradesh): Tabo Monastery
+    {
+        "source_id": "WD:Q675376",
+        "upstream_type": "item",
+        "upstream_id": "Q675376",
+        "name": "Tabo Monastery, Spiti Valley",
+        "local_names": {"hi": "ताबो बौद्ध मठ"},
+        "latitude": 32.0950,
+        "longitude": 78.3780,
+        "state": "Himachal Pradesh",
+        "district": "Lahaul and Spiti",
+        "sub_district": "Spiti",
+        "settlement_type": "village",
+        "cultural_category": CulturalCategory.RELIGIOUS,
+        "subcategory": "monastery",
+        "tags": {"historic": "monastery", "heritage_designation": "ASI Protected"},
+        "source_url": "https://www.wikidata.org/wiki/Q675376",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
+    # Extended Site (Karnataka): Gommateshwara Statue, Shravanabelagola
+    {
+        "source_id": "WD:Q3535231",
+        "upstream_type": "item",
+        "upstream_id": "Q3535231",
+        "name": "Gommateshwara Monolith, Shravanabelagola",
+        "local_names": {"kn": "ಗೊಮ್ಮಟೇಶ್ವರ ಬಾಹುಬಲಿ ಪ್ರತಿಮೆ"},
+        "latitude": 12.8580,
+        "longitude": 76.4860,
+        "state": "Karnataka",
+        "district": "Hassan",
+        "sub_district": "Channarayapatna",
+        "settlement_type": "town",
+        "cultural_category": CulturalCategory.RELIGIOUS,
+        "subcategory": "jain_monolith",
+        "tags": {"historic": "statue", "heritage_designation": "ASI Protected"},
+        "source_url": "https://www.wikidata.org/wiki/Q3535231",
+        "source_extract_date": date(2026, 10, 15),
+        "last_checked_date": date(2026, 11, 9),
+        "opening_hours": OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+        "entry_fee": EntryFeeDetail(status=FeeStatus.UNKNOWN),
+        "accessibility": AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+    },
 ]
 
 
@@ -417,19 +610,30 @@ def run_streaming_import(
     output_db: Path,
     snapshot_date: str = "2026-11-09"
 ) -> Dict[str, object]:
-    """Execute atomic streaming import into target SQLite database."""
+    """Execute atomic streaming import into target SQLite database with verified boundary and count reconciliation."""
+    unlocode_csv = Path(unlocode_csv)
+    output_db = Path(output_db)
+    unesco_json = Path(unesco_json) if unesco_json else None
+    boundary_geojson = Path(boundary_geojson) if boundary_geojson else None
+
     if not unlocode_csv.exists():
         raise FileNotFoundError(f"Missing UN/LOCODE CSV at {unlocode_csv}")
 
-    unlocode_sha = calculate_sha256(unlocode_csv)
-    boundary_sha = calculate_sha256(boundary_geojson) if boundary_geojson and boundary_geojson.exists() else "none"
+    if not boundary_geojson or not boundary_geojson.exists():
+        raise FileNotFoundError(f"Missing boundary GeoJSON at {boundary_geojson}")
 
-    # Initialize boundary validator
+    # Initialize and verify boundary validator
     boundary_val = IndiaBoundaryValidator(boundary_geojson)
+    if not boundary_val.is_available:
+        raise RuntimeError(f"Coordinate validation unavailable: boundary geometry in {boundary_geojson} is invalid or empty")
 
-    # Use atomic temporary database file to prevent partial corruptions
+    unlocode_sha = calculate_sha256(unlocode_csv)
+    boundary_sha = calculate_sha256(boundary_geojson)
+    unesco_sha = calculate_sha256(unesco_json) if unesco_json and unesco_json.exists() else "none"
+
+    # Stage on the same filesystem directory to ensure atomic replacement
     output_db.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(dir=output_db.parent, suffix=".tmp.db", delete=False) as tmp:
         temp_db_path = Path(tmp.name)
 
     try:
@@ -437,15 +641,19 @@ def run_streaming_import(
         import_dt = date.fromisoformat(snapshot_date)
 
         # 1. Stream Settlements from UN/LOCODE
-        settlements_count = 0
+        input_unlocode_count = 0
+        imported_unlocode_count = 0
+        rejected_unlocode_boundary_count = 0
+
         with open(unlocode_csv, "r", encoding="utf-8", errors="ignore") as f:
             reader = csv.DictReader(f)
             for r in reader:
                 if r.get("Country") == "IN" and r.get("Coordinates"):
+                    input_unlocode_count += 1
                     coords = parse_unlocode_coords(r["Coordinates"])
                     if coords:
                         lat, lon = coords
-                        # Strict boundary check (polygon + bbox)
+                        # Strict boundary check (MultiPolygon + Holes)
                         if boundary_val.is_inside(lat, lon):
                             subdiv = r.get("Subdivision", "")
                             state_name = IN_SUBDIVISIONS.get(subdiv, f"State-{subdiv}" if subdiv else "India")
@@ -457,7 +665,7 @@ def run_streaming_import(
                                 settlement_id=settle_id,
                                 name=name,
                                 state=state_name,
-                                district=None,  # UN/LOCODE does not supply districts
+                                district=None,
                                 settlement_type="town",
                                 latitude=lat,
                                 longitude=lon,
@@ -467,9 +675,12 @@ def run_streaming_import(
                                 extract_date=date(2026, 1, 1),
                             )
                             temp_store.insert_settlement(s)
-                            settlements_count += 1
+                            imported_unlocode_count += 1
+                        else:
+                            rejected_unlocode_boundary_count += 1
 
         # 2. Add Curated Multi-State Settlements (Disambiguation and known districts)
+        curated_settlements_count = len(CURATED_SETTLEMENTS)
         for cs in CURATED_SETTLEMENTS:
             s = RealSettlement(
                 settlement_id=cs["id"],
@@ -487,10 +698,9 @@ def run_streaming_import(
                 extract_date=date(2026, 1, 1),
             )
             temp_store.insert_settlement(s)
-            settlements_count += 1
 
         # 3. Add Verified Real Cultural Places
-        places_count = 0
+        curated_places_count = len(VERIFIED_CULTURAL_SITES)
         for p_data in VERIFIED_CULTURAL_SITES:
             place = RealPlaceRecord(
                 source_id=p_data["source_id"],
@@ -516,16 +726,19 @@ def run_streaming_import(
                 accessibility=p_data["accessibility"],
             )
             temp_store.insert_place(place)
-            places_count += 1
 
         # 4. Stream Additional UNESCO Sites from dataset if present
+        input_unesco_count = 0
+        imported_unesco_count = 0
+        rejected_unesco_boundary_count = 0
+
         if unesco_json and unesco_json.exists():
             with open(unesco_json, "r", encoding="utf-8") as f:
                 unesco_items = json.load(f)
+            input_unesco_count = len(unesco_items)
             for it in unesco_items:
                 qid = it["item"]["value"].split("/")[-1]
                 source_id = f"WD:{qid}"
-                # Avoid overwriting curated records that have full state/district details
                 if any(p["source_id"] == source_id for p in VERIFIED_CULTURAL_SITES):
                     continue
                 coords = parse_wkt_point(it["coord"]["value"])
@@ -540,7 +753,7 @@ def run_streaming_import(
                             name=name,
                             latitude=lat,
                             longitude=lon,
-                            state="India",  # State unrecorded in raw SPARQL output, preserved as general
+                            state="India",
                             district=None,
                             settlement_type="unknown",
                             cultural_category=CulturalCategory.HERITAGE,
@@ -555,29 +768,64 @@ def run_streaming_import(
                             accessibility=AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
                         )
                         temp_store.insert_place(place)
-                        places_count += 1
+                        imported_unesco_count += 1
+                    else:
+                        rejected_unesco_boundary_count += 1
+
+        # Reconcile published metadata from ACTUAL SQLite row counts
+        with temp_store._get_connection() as conn:
+            actual_settlements = conn.execute("SELECT count(*) FROM settlements").fetchone()[0]
+            actual_places = conn.execute("SELECT count(*) FROM places").fetchone()[0]
+            integrity = conn.execute("PRAGMA integrity_check").fetchall()
+            if not integrity or integrity[0][0] != "ok":
+                raise RuntimeError(f"Integrity check failed on staging database: {integrity}")
 
         # 5. Record Import Metadata in Database
         temp_store.set_metadata("coverage_level", "Partial Coverage")
-        temp_store.set_metadata("covered_regions", "Karnataka, Gujarat, Rajasthan, Bihar, Delhi, Maharashtra, UP, and UNECE UN/LOCODE Indian points")
+        temp_store.set_metadata("covered_regions", "Karnataka, Gujarat, Rajasthan, Bihar, Madhya Pradesh, Tamil Nadu, Odisha, Goa, Himachal Pradesh, Delhi, Maharashtra, UP, and UNECE UN/LOCODE Indian points")
         temp_store.set_metadata("snapshot_date", snapshot_date)
-        temp_store.set_metadata("settlements_count", str(settlements_count))
-        temp_store.set_metadata("places_count", str(places_count))
+        temp_store.set_metadata("settlements_count", str(actual_settlements))
+        temp_store.set_metadata("places_count", str(actual_places))
+        temp_store.set_metadata("input_unlocode_count", str(input_unlocode_count))
+        temp_store.set_metadata("imported_unlocode_count", str(imported_unlocode_count))
+        temp_store.set_metadata("rejected_unlocode_boundary_count", str(rejected_unlocode_boundary_count))
+        temp_store.set_metadata("input_unesco_count", str(input_unesco_count))
+        temp_store.set_metadata("imported_unesco_count", str(imported_unesco_count))
+        temp_store.set_metadata("rejected_unesco_boundary_count", str(rejected_unesco_boundary_count))
         temp_store.set_metadata("unlocode_sha256", unlocode_sha)
         temp_store.set_metadata("boundary_sha256", boundary_sha)
+        temp_store.set_metadata("unesco_sha256", unesco_sha)
 
-        # Atomic copy and replace to safely handle Windows file locks
-        shutil.copy2(str(temp_db_path), str(output_db))
+        # Atomic copy and replace with backup/rollback on Windows
+        backup_db_path = None
+        try:
+            if output_db.exists():
+                backup_db_path = output_db.with_suffix(".db.bak")
+                shutil.copy2(str(output_db), str(backup_db_path))
+            shutil.copy2(str(temp_db_path), str(output_db))
+            if backup_db_path and backup_db_path.exists():
+                backup_db_path.unlink()
+        except Exception as e:
+            if backup_db_path and backup_db_path.exists():
+                shutil.copy2(str(backup_db_path), str(output_db))
+                backup_db_path.unlink()
+            raise RuntimeError(f"Atomic replacement failed for {output_db}: {e}") from e
 
         return {
             "status": "success",
             "output_db": str(output_db),
-            "settlements_count": settlements_count,
-            "places_count": places_count,
+            "settlements_count": actual_settlements,
+            "places_count": actual_places,
+            "input_unlocode_count": input_unlocode_count,
+            "imported_unlocode_count": imported_unlocode_count,
+            "rejected_unlocode_boundary_count": rejected_unlocode_boundary_count,
+            "input_unesco_count": input_unesco_count,
+            "imported_unesco_count": imported_unesco_count,
+            "rejected_unesco_boundary_count": rejected_unesco_boundary_count,
             "unlocode_sha256": unlocode_sha,
             "boundary_sha256": boundary_sha,
+            "unesco_sha256": unesco_sha,
         }
-
 
     finally:
         if temp_db_path.exists():
