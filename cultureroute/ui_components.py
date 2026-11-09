@@ -126,50 +126,59 @@ def inject_editorial_css() -> None:
     }}
 
     /* Sidebar Collapse Button (inside sidebar header) */
-    [data-testid="stSidebarCollapseButton"],
     [data-testid="stSidebarCollapseButton"] button {{
         display: inline-flex !important;
         visibility: visible !important;
         opacity: 1 !important;
-        background-color: var(--yellow) !important;
-        color: var(--red) !important;
-        border: 1.5px solid var(--red) !important;
+        background: transparent !important;
+        border: 1px solid transparent !important;
+        color: var(--muted-ink) !important;
         border-radius: 4px !important;
-        box-shadow: 2px 2px 0 var(--red) !important;
+        box-shadow: none !important;
+        padding: 4px 6px !important;
         cursor: pointer !important;
         transition: all 0.15s ease !important;
     }}
     [data-testid="stSidebarCollapseButton"] button:hover {{
-        background-color: #fffaf0 !important;
-        transform: translate(1px, 1px) !important;
-        box-shadow: 1px 1px 0 var(--red) !important;
+        background: #e5dfd2 !important;
+        color: var(--oxblood) !important;
+        border-color: var(--line) !important;
     }}
 
     /* Sidebar Expand Button (visible when sidebar is closed) */
-    [data-testid="stExpandSidebarButton"],
-    button[data-testid="stExpandSidebarButton"],
     [data-testid="stSidebarCollapsedControl"] {{
         display: inline-flex !important;
         visibility: visible !important;
         opacity: 1 !important;
-        background-color: var(--yellow) !important;
-        color: var(--red) !important;
-        border: 2px solid var(--red) !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }}
+
+    [data-testid="stExpandSidebarButton"],
+    button[data-testid="stExpandSidebarButton"] {{
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: #ffffff !important;
+        color: var(--ink) !important;
+        border: 1px solid var(--line) !important;
         border-radius: 4px !important;
-        box-shadow: 2px 2px 0 var(--red) !important;
-        padding: 6px 12px !important;
-        font-family: var(--display) !important;
-        font-size: 0.9rem !important;
-        font-weight: 700 !important;
+        box-shadow: 0 1px 3px rgba(41, 41, 37, 0.08) !important;
+        padding: 4px 8px !important;
         cursor: pointer !important;
-        z-index: 999999 !important;
+        z-index: 99999 !important;
         transition: all 0.15s ease !important;
     }}
     [data-testid="stExpandSidebarButton"]:hover,
     button[data-testid="stExpandSidebarButton"]:hover {{
-        background-color: #fffaf0 !important;
-        transform: translate(1px, 1px) !important;
-        box-shadow: 1px 1px 0 var(--red) !important;
+        background-color: #f7f3e9 !important;
+        color: var(--oxblood) !important;
+        border-color: var(--oxblood) !important;
+        box-shadow: 0 2px 5px rgba(41, 41, 37, 0.12) !important;
     }}
 
     /* Flat Paper Surface (Dot texture removed per Stage F1) */
@@ -221,23 +230,7 @@ def inject_editorial_css() -> None:
         min-width: 280px !important;
     }}
 
-    [data-testid="stSidebarCollapsedControl"] {{
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important;
-        top: 14px !important;
-        left: 14px !important;
-        z-index: 999999 !important;
-    }}
 
-    [data-testid="stSidebarCollapsedControl"] button {{
-        background: var(--yellow) !important;
-        border: 1.5px solid var(--red) !important;
-        box-shadow: 2px 2px 0 var(--red) !important;
-        color: var(--red) !important;
-        border-radius: 0 !important;
-    }}
 
     .cr-sidebar-brand {{
         padding: 6px 0 16px;
