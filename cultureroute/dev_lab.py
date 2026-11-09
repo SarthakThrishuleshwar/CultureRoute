@@ -34,6 +34,7 @@ import math
 from pathlib import Path
 import re
 import sqlite3
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -86,6 +87,7 @@ class SQLQueryResult:
     row_count: int
     is_truncated: bool
     error_message: Optional[str] = None
+    execution_time_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -586,6 +588,7 @@ class ReadOnlySQLSandbox:
 
     def execute_query(self, query: str) -> SQLQueryResult:
         """Execute a single read-only SQL query inside the secured sandbox."""
+        t0 = time.perf_counter()
         clean_query = query.strip()
 
         # 1. Length check
@@ -656,12 +659,14 @@ class ReadOnlySQLSandbox:
             is_truncated = len(raw_rows) > self.MAX_ROWS_RETURNED
             output_rows = raw_rows[:self.MAX_ROWS_RETURNED]
 
+            exec_ms = round((time.perf_counter() - t0) * 1000.0, 2)
             return SQLQueryResult(
                 is_success=True,
                 columns=columns,
                 rows=[list(r) for r in output_rows],
                 row_count=len(output_rows),
-                is_truncated=is_truncated
+                is_truncated=is_truncated,
+                execution_time_ms=exec_ms
             )
         except sqlite3.OperationalError as e:
             err = str(e)

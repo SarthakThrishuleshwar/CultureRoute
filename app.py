@@ -291,11 +291,11 @@ if view_mode == "Overview":
             "as discovery-only catalog entries. Missing legs are never guessed or interpolated."
         )
 
-    with st.expander("Why are artificial intelligence and machine learning models omitted?"):
+    with st.expander("How does CultureRoute predict weekly cultural demand?"):
         st.write(
-            "In strict accordance with project specifications, CultureRoute uses explicit constraint rules, directed matrix legs, "
-            "and conventional statistical methods (Wilson score intervals, Beta-Binomial Bayesian models, lognormal MLE estimation, "
-            "and moving-average forecasting). All calculations are completely transparent and verifiable."
+            "CultureRoute incorporates a trained, regularized Poisson count regression model (Prediction Model view) "
+            "evaluated with strict chronological zero-leakage holdout splits across 45 Indian study cities and 57 complete weeks. "
+            "Routing remains purely deterministic and rules-based to ensure 100% reproducible itineraries."
         )
 
     with st.expander("How does CultureRoute support SDG 8, Target 8.9?"):
@@ -1318,20 +1318,6 @@ elif view_mode == "DEV Lab":
     </div>
     """, unsafe_allow_html=True)
 
-    # Guided Station Roadmaps pointing directly to the tabs below
-    st_cols = st.columns(5)
-    with st_cols[0]:
-        st.markdown('<div style="background:#ffffff;border:1px solid #b6afa3;border-top:3px solid #982b32;padding:8px 10px;font-size:0.77rem;line-height:1.4;"><strong>Tab 1 &middot; Profiler</strong><br><span style="color:#5c5852;">Grains, keys & null counts across 24 tables</span></div>', unsafe_allow_html=True)
-    with st_cols[1]:
-        st.markdown('<div style="background:#ffffff;border:1px solid #b6afa3;border-top:3px solid #365376;padding:8px 10px;font-size:0.77rem;line-height:1.4;"><strong>Tab 2 &middot; Transforms</strong><br><span style="color:#5c5852;">pandas filtering, price tier binning & joins</span></div>', unsafe_allow_html=True)
-    with st_cols[2]:
-        st.markdown('<div style="background:#ffffff;border:1px solid #b6afa3;border-top:3px solid #b79d5b;padding:8px 10px;font-size:0.77rem;line-height:1.4;"><strong>Tab 3 &middot; SQL Sandbox</strong><br><span style="color:#5c5852;">Read-only SQLite query execution & benchmarks</span></div>', unsafe_allow_html=True)
-    with st_cols[3]:
-        st.markdown('<div style="background:#ffffff;border:1px solid #b6afa3;border-top:3px solid #7d6f58;padding:8px 10px;font-size:0.77rem;line-height:1.4;"><strong>Tab 4 &middot; Visuals</strong><br><span style="color:#5c5852;">Wilson CIs, category & action donuts, ECDFs</span></div>', unsafe_allow_html=True)
-    with st_cols[4]:
-        st.markdown('<div style="background:#ffffff;border:1px solid #b6afa3;border-top:3px solid #292925;padding:8px 10px;font-size:0.77rem;line-height:1.4;"><strong>Tab 5 &middot; Formulas</strong><br><span style="color:#5c5852;">Syllabus formulas & Parquet export code</span></div>', unsafe_allow_html=True)
-    st.markdown('<div style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
-
     lab_t1, lab_t2, lab_t3, lab_t4, lab_t5 = st.tabs([
         "1. Sources & Profiling",
         "2. Guided Transforms",
@@ -1806,15 +1792,19 @@ elif view_mode == "DEV Lab":
                 st.markdown(f"**Interpretation:** {item['interpretation']}")
                 st.caption(f"Example SQL Query: `{item['preset_query']}`")
                 if st.button(f"Run this example ({item['unit']})", key=f"btn_run_{item['unit']}"):
-                    sandbox = ReadOnlySQLSandbox()
-                    exec_res = sandbox.execute_query(item["preset_query"])
-                    if exec_res.is_success:
-                        st.success(f"Executed in {exec_res.execution_time_ms:.1f}ms ({exec_res.row_count} rows returned):")
-                        if exec_res.rows:
-                            res_df = pd.DataFrame(exec_res.rows, columns=exec_res.columns)
-                            st.dataframe(res_df, hide_index=True, use_container_width=True)
-                    else:
-                        st.error(f"Execution Error: {exec_res.error_message}")
+                    try:
+                        sandbox = ReadOnlySQLSandbox()
+                        exec_res = sandbox.execute_query(item["preset_query"])
+                        if exec_res.is_success:
+                            time_ms = getattr(exec_res, "execution_time_ms", 0.0)
+                            st.success(f"Executed in {time_ms:.1f}ms ({exec_res.row_count} rows returned):")
+                            if exec_res.rows:
+                                res_df = pd.DataFrame(exec_res.rows, columns=exec_res.columns)
+                                st.dataframe(res_df, hide_index=True, use_container_width=True)
+                        else:
+                            st.error(f"Execution Error: {exec_res.error_message}")
+                    except Exception as ex:
+                        st.error(f"Execution Exception: {ex}")
 
 # ==============================================================================
 # SCREEN: PREDICTION MODEL (Stage P6)
