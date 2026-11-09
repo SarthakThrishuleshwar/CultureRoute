@@ -84,7 +84,16 @@ def render_model_screen() -> None:
             st.markdown("**Inspect City-Level Prediction:**")
             city_names = [cp["city_name"] for cp in pred_cities]
             def_city = st.session_state.get("default_city", "Jaipur")
-            sel_idx = city_names.index(def_city) if def_city in city_names else 0
+
+            st.markdown("**Quick City Hubs:**")
+            quick_pred_cities = ["Jaipur", "Delhi", "Mumbai", "Varanasi", "Kochi", "Agra", "Bengaluru"]
+            picked_pred_city = st.pills("Quick City Hubs", quick_pred_cities, key="pills_model_quick_city", label_visibility="collapsed")
+            if picked_pred_city and picked_pred_city != st.session_state.get("p6_city_inspect_select"):
+                st.session_state["p6_city_inspect_select"] = picked_pred_city
+                st.rerun()
+
+            cur_p6_city = st.session_state.get("p6_city_inspect_select", def_city)
+            sel_idx = city_names.index(cur_p6_city) if cur_p6_city in city_names else 0
             selected_city = st.selectbox("Select Study City", city_names, index=sel_idx, key="p6_city_inspect_select")
 
             city_match = next((cp for cp in pred_cities if cp["city_name"] == selected_city), pred_cities[0])

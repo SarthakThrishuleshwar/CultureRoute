@@ -77,36 +77,56 @@ def _scoped_selected_sql(expression: str = "count(*)") -> str:
     """
 
 
+# Persistent extracted SQLite cache paths for maximum query throughput
+CACHE_DIR = ROOT_DIR / "data"
+CACHE_SMART_DB = CACHE_DIR / ".cache_smart.db"
+CACHE_WANDER_DB = CACHE_DIR / ".cache_wander.db"
+
+
+def _ensure_extracted_cache() -> Tuple[Path, Path]:
+    """Ensure both study databases are extracted once to persistent disk cache."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    smart_needs_extract = not CACHE_SMART_DB.exists()
+    if not smart_needs_extract:
+        smart_needs_extract = CACHE_SMART_DB.stat().st_mtime < SMART_TRIP_ZIP.stat().st_mtime
+
+    if smart_needs_extract:
+        with zipfile.ZipFile(SMART_TRIP_ZIP) as z1:
+            CACHE_SMART_DB.write_bytes(z1.read(SMART_DB_ENTRY))
+
+    wander_needs_extract = not CACHE_WANDER_DB.exists()
+    if not wander_needs_extract:
+        wander_needs_extract = CACHE_WANDER_DB.stat().st_mtime < WANDER_MATCH_ZIP.stat().st_mtime
+
+    if wander_needs_extract:
+        with zipfile.ZipFile(WANDER_MATCH_ZIP) as z2:
+            CACHE_WANDER_DB.write_bytes(z2.read(WANDER_DB_ENTRY))
+
+    return CACHE_SMART_DB, CACHE_WANDER_DB
+
+
 @contextmanager
 def open_study_databases() -> Generator[Tuple[sqlite3.Connection, sqlite3.Connection], None, None]:
-    """Extract SQLite databases to temporary files and open them in read-only mode."""
+    """Open persistent extracted SQLite databases in read-only mode with zero unzipping overhead."""
     if not SMART_TRIP_ZIP.exists():
         raise FileNotFoundError(f"Missing SmartTrip archive at {SMART_TRIP_ZIP}")
     if not WANDER_MATCH_ZIP.exists():
         raise FileNotFoundError(f"Missing WanderMatch archive at {WANDER_MATCH_ZIP}")
 
-    temp_paths: List[Path] = []
+    smart_path, wander_path = _ensure_extracted_cache()
+
     smart_conn: sqlite3.Connection | None = None
     wander_conn: sqlite3.Connection | None = None
 
     try:
-        with zipfile.ZipFile(SMART_TRIP_ZIP) as z1:
-            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as t1:
-                t1.write(z1.read(SMART_DB_ENTRY))
-                temp_paths.append(Path(t1.name))
-
-        with zipfile.ZipFile(WANDER_MATCH_ZIP) as z2:
-            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as t2:
-                t2.write(z2.read(WANDER_DB_ENTRY))
-                temp_paths.append(Path(t2.name))
-
-        smart_conn = sqlite3.connect(f"{temp_paths[0].as_uri()}?mode=ro", uri=True)
-        wander_conn = sqlite3.connect(f"{temp_paths[1].as_uri()}?mode=ro", uri=True)
+        smart_conn = sqlite3.connect(f"{smart_path.as_uri()}?mode=ro", uri=True)
+        wander_conn = sqlite3.connect(f"{wander_path.as_uri()}?mode=ro", uri=True)
         smart_conn.row_factory = sqlite3.Row
         wander_conn.row_factory = sqlite3.Row
 
         # Attach WanderMatch database as 'wm' to smart_conn for joined queries
-        smart_conn.execute("ATTACH DATABASE ? AS wm", (f"{temp_paths[1].as_uri()}?mode=ro",))
+        smart_conn.execute("ATTACH DATABASE ? AS wm", (f"{wander_path.as_uri()}?mode=ro",))
 
         yield smart_conn, wander_conn
 
@@ -119,11 +139,6 @@ def open_study_databases() -> Generator[Tuple[sqlite3.Connection, sqlite3.Connec
         if wander_conn:
             try:
                 wander_conn.close()
-            except Exception:
-                pass
-        for p in temp_paths:
-            try:
-                p.unlink(missing_ok=True)
             except Exception:
                 pass
 

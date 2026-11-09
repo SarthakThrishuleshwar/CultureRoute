@@ -29,6 +29,7 @@ Covers all 5 syllabus units:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 import io
 import math
 from pathlib import Path
@@ -110,6 +111,7 @@ class TableProfileResult:
 # Unit 1: EDA & Methodology Comparisons
 # ------------------------------------------------------------------------------
 
+@lru_cache(maxsize=64)
 def compute_methodology_comparison(strict_active_only: bool = False) -> MethodologyComparisonResult:
     """Compare EDA (proportion), Classical (Wilson CI), and Bayesian (Beta-Binomial) on owner cohort."""
     with open_study_databases() as (smart, _):
@@ -189,6 +191,7 @@ def compute_methodology_comparison(strict_active_only: bool = False) -> Methodol
     )
 
 
+@lru_cache(maxsize=64)
 def get_table_profile(table_name: str, sample_limit: int = 50) -> Optional[TableProfileResult]:
     """Retrieve full catalog profiling information and safe preview for a table."""
     cat = load_study_catalog()
@@ -492,6 +495,7 @@ def transform_user_interactions(
     return grp, metrics, snippet
 
 
+@lru_cache(maxsize=64)
 def compute_canonical_saved_planned_merge() -> CanonicalMergeResult:
     """Compute the audited full outer merge between saved POIs and planned POIs."""
     with open_study_databases() as (smart, _):

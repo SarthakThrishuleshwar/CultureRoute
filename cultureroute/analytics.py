@@ -20,6 +20,7 @@ Provides:
 from __future__ import annotations
 
 from collections import Counter
+from functools import lru_cache
 from dataclasses import dataclass, asdict
 from datetime import datetime, date, timedelta
 import math
@@ -105,6 +106,7 @@ class FootfallImputationReport:
     events_imputed: List[Dict[str, Any]]
 
 
+@lru_cache(maxsize=16)
 def compute_cultural_shares() -> Dict[str, CulturalShareMetric]:
     """Compute the three canonical cultural shares with separate denominators."""
     with open_study_databases() as (smart, _):
@@ -169,6 +171,7 @@ def compute_cultural_shares() -> Dict[str, CulturalShareMetric]:
     }
 
 
+@lru_cache(maxsize=16)
 def compute_price_descriptives() -> Tuple[PriceDescriptives, pd.DataFrame]:
     """Compute parametric and non-parametric summary statistics on attraction entry prices."""
     with open_study_databases() as (smart, _):
@@ -215,6 +218,7 @@ def compute_price_descriptives() -> Tuple[PriceDescriptives, pd.DataFrame]:
     return stats, df
 
 
+@lru_cache(maxsize=16)
 def compute_weekly_forecast_backtest() -> ForecastReport:
     """Evaluate weekly cultural engagement forecasting models over the last 12 complete weeks."""
     with open_study_databases() as (smart, _):
@@ -290,6 +294,7 @@ def compute_weekly_forecast_backtest() -> ForecastReport:
     )
 
 
+@lru_cache(maxsize=16)
 def compute_footfall_imputation_study() -> FootfallImputationReport:
     """Evaluate missing expected-footfall imputation with a deterministic holdout split."""
     with open_study_databases() as (smart, _):

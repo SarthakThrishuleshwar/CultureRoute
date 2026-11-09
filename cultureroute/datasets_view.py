@@ -183,12 +183,20 @@ def render_datasets_screen() -> None:
     # --------------------------------------------------------------------------
     # CONTROLS ROW: Source Filter, Search, Table Select
     # --------------------------------------------------------------------------
-    origin_choice = st.radio(
+    origin_choice = st.pills(
         "Filter by Origin Pack",
         ["All (24)", "SmartTrip-only (10)", "WanderMatch-only (6)", "Shared (8)"],
-        horizontal=True,
+        default="All (24)",
         key="f2_origin_choice",
-    )
+    ) or "All (24)"
+
+    st.markdown("**Quick Table Picks:**")
+    top_tbl_picks = ["trips", "activities_poi", "user_interactions", "events_festivals", "itineraries", "poi_travel_matrix"]
+    picked_top_tbl = st.pills("Quick Table Picks", top_tbl_picks, key="pills_datasets_quick_tbl", label_visibility="collapsed")
+    if picked_top_tbl and picked_top_tbl != st.session_state.get("f2_tbl_select_val"):
+        st.session_state["f2_tbl_select_val"] = picked_top_tbl
+        st.query_params["table"] = picked_top_tbl
+        st.rerun()
 
     if "SmartTrip" in origin_choice:
         scoped_names = [t for t in all_table_names if t in SMARTTRIP_ONLY]

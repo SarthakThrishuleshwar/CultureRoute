@@ -20,6 +20,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import hashlib
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -413,6 +414,7 @@ def build_study_database(target_path: Optional[Path] = None, force: bool = False
             p.unlink(missing_ok=True)
 
 
+@lru_cache(maxsize=16)
 def load_study_catalog(db_path: Optional[Path] = None) -> StudyDatabaseCatalog:
     """Read schema catalog and metadata from the compiled study SQLite database."""
     path = db_path or DEFAULT_STUDY_DB
