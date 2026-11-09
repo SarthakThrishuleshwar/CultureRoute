@@ -1,0 +1,23 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+env/
+venv/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local data extracts and generated catalog index (reproduced via cultureroute.ingest)
+data/
+*.db
+!SmartTrip/data/*.db
+!WanderMatch/data/*.db
+
+# Streamlit local state
+.streamlit/
