@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date, datetime
 import json
+import math
 from pathlib import Path
 import sqlite3
 import pandas as pd
@@ -521,29 +522,219 @@ elif view_mode == "Discover":
             else:
                 st.info(f"No specific guide records registered for {selected_city_name} in WanderMatch telemetry.")
 
-        # Offline Coordinate Scatter Plot & City Category Distribution
+        # Enhanced Spatial & Category Distribution (Multi-Representation)
         if len(filtered_df) > 0:
             st.subheader(f"Attraction Spatial & Category Distribution: {selected_city_name}")
+
+            # Compute Haversine distance from municipal center
+            def _calc_haversine(lat1, lon1, lat2, lon2):
+                R = 6371.0
+                dlat = math.radians(lat2 - lat1)
+                dlon = math.radians(lon2 - lon1)
+                a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+                return round(R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)), 2)
+
+            filtered_df = filtered_df.copy()
+            filtered_df["dist_from_center_km"] = filtered_df.apply(
+                lambda r: _calc_haversine(selected_city["lat"], selected_city["lng"], r["lat"], r["lng"]),
+                axis=1
+            )
+
+            category_palette = {
+                "heritage": "#982b32",
+                "museum": "#365376",
+                "food": "#b79d5b",
+                "shopping": "#7d6f58",
+                "nightlife": "#4f637b",
+                "adventure": "#8b7e66",
+                "wellness": "#a89f91",
+                "nature": "#2e5d4b",
+                "viewpoint": "#6c4675",
+                "beach": "#4682b4",
+                "religious": "#8c4843",
+            }
+
+            st.markdown("**Choose Presentation Format:**")
+            spatial_mode = st.pills(
+                "Spatial Presentation Format",
+                [
+                    "Distance from City Center (Ranked Bar)",
+                    "Interactive Geographic Map",
+                    "Neighborhood Proximity Clusters",
+                    "Offline Coordinate Grid",
+                ],
+                default="Distance from City Center (Ranked Bar)",
+                key=f"discover_spatial_mode_{selected_city['city_id']}",
+                label_visibility="collapsed"
+            ) or "Distance from City Center (Ranked Bar)"
+
             scat_col1, scat_col2 = st.columns([1.4, 1.0])
             with scat_col1:
-                fig_scatter = px.scatter(
-                    filtered_df,
-                    x="lng",
-                    y="lat",
-                    text="name",
-                    color="poi_category",
-                    symbol="in_travel_matrix",
-                    labels={"lng": "Longitude", "lat": "Latitude", "poi_category": "Category", "in_travel_matrix": "Matrix Covered"},
-                    title=f"{selected_city_name} Attraction Map (Offline Coordinate Plot)"
-                )
-                fig_scatter.update_traces(textposition="top center", marker=dict(size=11))
-                fig_scatter.update_layout(
-                    height=440,
-                    paper_bgcolor="#f7f3e9",
-                    plot_bgcolor="#ffffff",
-                    margin=dict(l=20, r=20, t=40, b=20)
-                )
-                st.plotly_chart(fig_scatter, use_container_width=True)
+                if spatial_mode == "Distance from City Center (Ranked Bar)":
+                    df_sorted_dist = filtered_df.sort_values("dist_from_center_km", ascending=True)
+                    calc_h = max(380, min(650, len(df_sorted_dist) * 28 + 90))
+                    fig_bar = px.bar(
+                        df_sorted_dist,
+                        x="dist_from_center_km",
+                        y="name",
+                        orientation="h",
+                        color="poi_category",
+                        text="dist_from_center_km",
+                        hover_data={
+                            "poi_category": True,
+                            "entry_cost": True,
+                            "typical_duration_minutes": True,
+                            "in_travel_matrix": True,
+                            "dist_from_center_km": ":.2f"
+                        },
+                        labels={
+                            "dist_from_center_km": "Distance from City Center (km)",
+                            "name": "Attraction Name",
+                            "poi_category": "Category",
+                            "entry_cost": "Entry Fee (INR)",
+                            "typical_duration_minutes": "Duration (min)",
+                            "in_travel_matrix": "Matrix Covered"
+                        },
+                        title=f"{selected_city_name} Attractions Ranked by Distance from City Center",
+                        color_discrete_map=category_palette
+                    )
+                    fig_bar.update_traces(
+                        texttemplate="%{text:.1f} km",
+                        textposition="outside",
+                        marker=dict(line=dict(width=1, color="#292925"))
+                    )
+                    fig_bar.update_layout(
+                        height=calc_h,
+                        paper_bgcolor="#f7f3e9",
+                        plot_bgcolor="#ffffff",
+                        yaxis=dict(autorange="reversed", title=""),
+                        xaxis=dict(title="Distance from City Center (km)"),
+                        margin=dict(l=20, r=40, t=40, b=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.caption("Intuitive Bar Chart: Displays each venue's exact distance in km from the municipal center, colored by cultural category, eliminating unreadable overlapping points.")
+
+                elif spatial_mode == "Interactive Geographic Map":
+                    try:
+                        fig_map = px.scatter_map(
+                            filtered_df,
+                            lat="lat",
+                            lon="lng",
+                            hover_name="name",
+                            hover_data={
+                                "poi_category": True,
+                                "dist_from_center_km": True,
+                                "entry_cost": True,
+                                "typical_duration_minutes": True,
+                                "in_travel_matrix": True,
+                                "lat": False,
+                                "lng": False
+                            },
+                            color="poi_category",
+                            zoom=11,
+                            center={"lat": selected_city["lat"], "lon": selected_city["lng"]},
+                            map_style="open-street-map",
+                            title=f"{selected_city_name} Interactive Map (OpenStreetMap)",
+                            color_discrete_map=category_palette
+                        )
+                        fig_map.update_traces(marker=dict(size=14, opacity=0.9))
+                        fig_map.update_layout(
+                            height=440,
+                            paper_bgcolor="#f7f3e9",
+                            margin=dict(l=0, r=0, t=40, b=0),
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        st.plotly_chart(fig_map, use_container_width=True)
+                        st.caption("Geographic Map: Placed directly on OpenStreetMap city streets, roads, and landmarks for real-world spatial orientation.")
+                    except Exception as ex:
+                        st.warning(f"Geographic map unavailable in this view: {ex}. Showing coordinate grid.")
+                        fig_fallback = px.scatter(
+                            filtered_df, x="lng", y="lat", text="name", color="poi_category",
+                            labels={"lng": "Longitude", "lat": "Latitude", "poi_category": "Category"},
+                            title=f"{selected_city_name} Attraction Map (Offline Coordinate Plot)",
+                            color_discrete_map=category_palette
+                        )
+                        fig_fallback.update_layout(height=440, paper_bgcolor="#f7f3e9", plot_bgcolor="#ffffff")
+                        st.plotly_chart(fig_fallback, use_container_width=True)
+
+                elif spatial_mode == "Neighborhood Proximity Clusters":
+                    core_pois = filtered_df[filtered_df["dist_from_center_km"] <= 3.5]
+                    mid_pois = filtered_df[(filtered_df["dist_from_center_km"] > 3.5) & (filtered_df["dist_from_center_km"] <= 7.0)]
+                    outer_pois = filtered_df[filtered_df["dist_from_center_km"] > 7.0]
+
+                    st.markdown(f"**Concentric Spatial Rings:** Categorizing {len(filtered_df)} venues by travel proximity:")
+                    c_t1, c_t2, c_t3 = st.columns(3)
+                    with c_t1:
+                        core_items = "".join([f"<li style='margin-bottom:4px;'><strong>{r['name']}</strong> <span style='color:#5c5852;'>({r['dist_from_center_km']} km &middot; {r['poi_category']})</span></li>" for _, r in core_pois.iterrows()]) or "<li style='color:#8b7e66;'>No venues in this ring</li>"
+                        st.markdown(f'''
+                        <div style="background: #ffffff; border: 1.5px solid #b6afa3; border-top: 4px solid #982b32; padding: 14px 16px; min-height: 240px;">
+                            <div style="font-family: Georgia, serif; font-size: 1.0rem; font-weight: bold; color: #292925;">
+                                Central Core (&le; 3.5 km)
+                            </div>
+                            <div style="font-size: 0.75rem; color: #982b32; font-weight: bold; margin-bottom: 8px;">
+                                {len(core_pois)} ATTRACTIONS
+                            </div>
+                            <ul style="font-size: 0.82rem; padding-left: 18px; margin: 0; line-height: 1.5; color: #292925;">
+                                {core_items}
+                            </ul>
+                        </div>
+                        ''', unsafe_allow_html=True)
+
+                    with c_t2:
+                        mid_items = "".join([f"<li style='margin-bottom:4px;'><strong>{r['name']}</strong> <span style='color:#5c5852;'>({r['dist_from_center_km']} km &middot; {r['poi_category']})</span></li>" for _, r in mid_pois.iterrows()]) or "<li style='color:#8b7e66;'>No venues in this ring</li>"
+                        st.markdown(f'''
+                        <div style="background: #ffffff; border: 1.5px solid #b6afa3; border-top: 4px solid #365376; padding: 14px 16px; min-height: 240px;">
+                            <div style="font-family: Georgia, serif; font-size: 1.0rem; font-weight: bold; color: #292925;">
+                                Heritage Ring (3.5 - 7 km)
+                            </div>
+                            <div style="font-size: 0.75rem; color: #365376; font-weight: bold; margin-bottom: 8px;">
+                                {len(mid_pois)} ATTRACTIONS
+                            </div>
+                            <ul style="font-size: 0.82rem; padding-left: 18px; margin: 0; line-height: 1.5; color: #292925;">
+                                {mid_items}
+                            </ul>
+                        </div>
+                        ''', unsafe_allow_html=True)
+
+                    with c_t3:
+                        outer_items = "".join([f"<li style='margin-bottom:4px;'><strong>{r['name']}</strong> <span style='color:#5c5852;'>({r['dist_from_center_km']} km &middot; {r['poi_category']})</span></li>" for _, r in outer_pois.iterrows()]) or "<li style='color:#8b7e66;'>No venues in this ring</li>"
+                        st.markdown(f'''
+                        <div style="background: #ffffff; border: 1.5px solid #b6afa3; border-top: 4px solid #b79d5b; padding: 14px 16px; min-height: 240px;">
+                            <div style="font-family: Georgia, serif; font-size: 1.0rem; font-weight: bold; color: #292925;">
+                                Outer Excursions (> 7 km)
+                            </div>
+                            <div style="font-size: 0.75rem; color: #7d6f58; font-weight: bold; margin-bottom: 8px;">
+                                {len(outer_pois)} ATTRACTIONS
+                            </div>
+                            <ul style="font-size: 0.82rem; padding-left: 18px; margin: 0; line-height: 1.5; color: #292925;">
+                                {outer_items}
+                            </ul>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                    st.caption("Neighborhood Clusters: Venues organized by operational travel proximity tiers.")
+
+                else: # Raw Coordinate Grid
+                    fig_scatter = px.scatter(
+                        filtered_df,
+                        x="lng",
+                        y="lat",
+                        text="name",
+                        color="poi_category",
+                        symbol="in_travel_matrix",
+                        labels={"lng": "Longitude", "lat": "Latitude", "poi_category": "Category", "in_travel_matrix": "Matrix Covered"},
+                        title=f"{selected_city_name} Attraction Map (Offline Coordinate Plot)",
+                        color_discrete_map=category_palette
+                    )
+                    fig_scatter.update_traces(textposition="top center", marker=dict(size=12))
+                    fig_scatter.update_layout(
+                        height=440,
+                        paper_bgcolor="#f7f3e9",
+                        plot_bgcolor="#ffffff",
+                        margin=dict(l=20, r=20, t=40, b=20)
+                    )
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    st.caption("Offline Coordinate Plot: Raw GPS latitude and longitude grid coordinates.")
 
             with scat_col2:
                 city_cat_counts = filtered_df["poi_category"].value_counts().reset_index()
@@ -554,14 +745,35 @@ elif view_mode == "Discover":
                     values="count",
                     hole=0.45,
                     title=f"{selected_city_name} Category Composition ({len(filtered_df)} POIs)",
-                    color_discrete_sequence=["#982b32", "#365376", "#b79d5b", "#7d6f58", "#5c5852", "#a89f91"]
+                    color="poi_category",
+                    color_discrete_map=category_palette
+                )
+                fig_city_pie.update_traces(
+                    textposition="inside",
+                    textinfo="label+value",
+                    texttemplate="%{label}<br>%{value} POIs"
                 )
                 fig_city_pie.update_layout(
-                    height=440,
+                    height=330,
                     paper_bgcolor="#f7f3e9",
                     margin=dict(l=10, r=10, t=40, b=10)
                 )
                 st.plotly_chart(fig_city_pie, use_container_width=True)
+
+                # Quick Summary Cards below Donut
+                nearest_row = filtered_df.loc[filtered_df['dist_from_center_km'].idxmin()]
+                farthest_row = filtered_df.loc[filtered_df['dist_from_center_km'].idxmax()]
+                st.markdown(f'''
+                <div style="background: #ffffff; border: 1.5px solid #b6afa3; padding: 14px 16px; margin-top: 10px;">
+                    <div style="font-size: 0.78rem; font-weight: bold; color: #982b32; text-transform: uppercase;">City Spatial Summary</div>
+                    <div style="font-size: 0.84rem; color: #292925; line-height: 1.6; margin-top: 6px;">
+                        &bull; <strong>Median Distance:</strong> {filtered_df['dist_from_center_km'].median():.1f} km from center<br>
+                        &bull; <strong>Nearest Venue:</strong> {nearest_row['name']} ({nearest_row['dist_from_center_km']:.1f} km)<br>
+                        &bull; <strong>Farthest Venue:</strong> {farthest_row['name']} ({farthest_row['dist_from_center_km']:.1f} km)<br>
+                        &bull; <strong>Matrix Coverage:</strong> {sum(filtered_df['in_travel_matrix'])} / {len(filtered_df)} connected in router
+                    </div>
+                </div>
+                ''', unsafe_allow_html=True)
     with tab_legacy_discover:
         st.markdown("""
         <div style="background: #ffffff; border: 1.5px solid #b6afa3; border-left: 4px solid #365376; padding: 16px 20px; margin-bottom: 18px;">
@@ -634,26 +846,76 @@ elif view_mode == "Discover":
                 use_container_width=True
             )
 
-            # Spatial distribution scatter plot of legacy places
+            # Spatial distribution presentation of legacy places
             if len(filtered_leg) > 0:
                 st.subheader("Archived Venue Geographic Distribution")
-                fig_leg_scatter = px.scatter(
-                    filtered_leg,
-                    x="longitude",
-                    y="latitude",
-                    color="cultural_category",
-                    hover_name="name",
-                    hover_data=["state", "district"],
-                    title=f"Archived Pilot Venues Spatial Distribution ({len(filtered_leg)} points)",
-                    color_discrete_sequence=["#982b32", "#365376", "#733339", "#4f637b", "#8b7e66"]
-                )
-                fig_leg_scatter.update_layout(
-                    height=380,
-                    paper_bgcolor="#f7f3e9",
-                    plot_bgcolor="#ffffff",
-                    margin=dict(l=20, r=20, t=35, b=20)
-                )
-                st.plotly_chart(fig_leg_scatter, use_container_width=True)
+                leg_mode = st.pills(
+                    "Presentation Mode",
+                    ["Category Breakdown (Bar Chart)", "Interactive Map", "Raw Coordinate Scatter"],
+                    default="Category Breakdown (Bar Chart)",
+                    key="legacy_discover_mode_pills",
+                    label_visibility="collapsed"
+                ) or "Category Breakdown (Bar Chart)"
+
+                if leg_mode == "Category Breakdown (Bar Chart)":
+                    cat_summary = filtered_leg["cultural_category"].value_counts().reset_index()
+                    cat_summary.columns = ["cultural_category", "venue_count"]
+                    fig_leg_bar = px.bar(
+                        cat_summary,
+                        x="venue_count",
+                        y="cultural_category",
+                        orientation="h",
+                        text="venue_count",
+                        color="cultural_category",
+                        color_discrete_sequence=["#982b32", "#365376", "#733339", "#4f637b", "#8b7e66"],
+                        labels={"cultural_category": "Category", "venue_count": "Venue Count"},
+                        title=f"Archived Pilot Venues by Category ({len(filtered_leg)} total)"
+                    )
+                    fig_leg_bar.update_traces(textposition="outside")
+                    fig_leg_bar.update_layout(
+                        height=340,
+                        paper_bgcolor="#f7f3e9",
+                        plot_bgcolor="#ffffff",
+                        showlegend=False,
+                        margin=dict(l=20, r=30, t=35, b=20)
+                    )
+                    st.plotly_chart(fig_leg_bar, use_container_width=True)
+                elif leg_mode == "Interactive Map":
+                    try:
+                        fig_leg_map = px.scatter_map(
+                            filtered_leg,
+                            lat="latitude",
+                            lon="longitude",
+                            color="cultural_category",
+                            hover_name="name",
+                            hover_data=["state", "district"],
+                            title=f"Archived Pilot Venues ({len(filtered_leg)} points)",
+                            zoom=4,
+                            map_style="open-street-map",
+                            color_discrete_sequence=["#982b32", "#365376", "#733339", "#4f637b", "#8b7e66"]
+                        )
+                        fig_leg_map.update_layout(height=380, paper_bgcolor="#f7f3e9", margin=dict(l=0, r=0, t=35, b=0))
+                        st.plotly_chart(fig_leg_map, use_container_width=True)
+                    except Exception:
+                        pass
+                else:
+                    fig_leg_scatter = px.scatter(
+                        filtered_leg,
+                        x="longitude",
+                        y="latitude",
+                        color="cultural_category",
+                        hover_name="name",
+                        hover_data=["state", "district"],
+                        title=f"Archived Pilot Venues Spatial Distribution ({len(filtered_leg)} points)",
+                        color_discrete_sequence=["#982b32", "#365376", "#733339", "#4f637b", "#8b7e66"]
+                    )
+                    fig_leg_scatter.update_layout(
+                        height=380,
+                        paper_bgcolor="#f7f3e9",
+                        plot_bgcolor="#ffffff",
+                        margin=dict(l=20, r=20, t=35, b=20)
+                    )
+                    st.plotly_chart(fig_leg_scatter, use_container_width=True)
 
             st.info(
                 "Notice: To plan deterministic itineraries, compare cultural trade-offs, or evaluate predictive models, "
@@ -1870,21 +2132,90 @@ elif view_mode == "DEV Lab":
             bm3.metric("Spearman Rank Corr (r_s)", f"{spearman_corr:.2f}", "Ordinal price elasticity")
             bm4.metric("High-Save Venues (>2 saves)", f"{(biv_df['saves_count'] > 2).sum()}", "High engagement sites")
 
-            fig_biv = px.scatter(
-                biv_df,
-                x="entry_cost",
-                y="saves_count",
-                color="poi_category",
-                hover_name="name",
-                hover_data=["city_name"],
-                color_discrete_sequence=["#982b32", "#365376", "#b79d5b", "#7d6f58", "#4f637b", "#8b7e66", "#292925"],
-                labels={"entry_cost": "Entry Fee (INR)", "saves_count": "Telemetry Saves Count", "poi_category": "Category"},
-                title=f"Attraction Entry Fee vs User Saves (All 363 Saved Indian Study POIs, Max INR 2,500)"
-            )
-            fig_biv.update_traces(marker=dict(size=9, opacity=0.8, line=dict(width=1, color="#292925")))
-            fig_biv.update_layout(height=380, paper_bgcolor="#f7f3e9", plot_bgcolor="#ffffff", margin=dict(l=20, r=20, t=35, b=20))
-            st.plotly_chart(fig_biv, use_container_width=True)
-            st.caption("Economic Finding: Across all 363 saved study attractions in Indian cities, entry fees range comfortably from INR 0 to INR 2,500. Entry fee demonstrates a near-zero rank correlation with save volume, indicating broad user interest across price tiers.")
+            st.markdown("**Choose Representation Style:**")
+            biv_format = st.pills(
+                "Bivariate Visualization Format",
+                [
+                    "Economic Price Brackets (Bar Chart)",
+                    "Raw Point Scatter",
+                ],
+                default="Economic Price Brackets (Bar Chart)",
+                key="dev_lab_biv_format_pills",
+                label_visibility="collapsed"
+            ) or "Economic Price Brackets (Bar Chart)"
+
+            if biv_format == "Economic Price Brackets (Bar Chart)":
+                def get_price_bracket(fee):
+                    if fee == 0:
+                        return "1. Free (INR 0)"
+                    elif fee <= 100:
+                        return "2. Budget (INR 1-100)"
+                    elif fee <= 300:
+                        return "3. Moderate (INR 101-300)"
+                    elif fee <= 750:
+                        return "4. Mid-Range (INR 301-750)"
+                    else:
+                        return "5. Premium (INR 751-2500)"
+
+                biv_df["price_tier"] = biv_df["entry_cost"].apply(get_price_bracket)
+                tier_summary = biv_df.groupby("price_tier", observed=False).agg(
+                    total_venues=("poi_id", "count"),
+                    avg_saves=("saves_count", "mean"),
+                    total_saves=("saves_count", "sum")
+                ).reset_index()
+
+                fig_biv_bar = px.bar(
+                    tier_summary,
+                    x="price_tier",
+                    y="avg_saves",
+                    text="avg_saves",
+                    color="avg_saves",
+                    color_continuous_scale=["#f0eae1", "#982b32"],
+                    hover_data={"total_venues": True, "total_saves": True, "avg_saves": ":.2f"},
+                    labels={
+                        "price_tier": "Attraction Price Bracket",
+                        "avg_saves": "Average Saves / Venue",
+                        "total_venues": "Venues in Tier",
+                        "total_saves": "Total Saves"
+                    },
+                    title="Average User Saves Across Price Brackets (363 Saved Indian Venues)"
+                )
+                fig_biv_bar.update_traces(
+                    texttemplate="%{text:.2f} saves",
+                    textposition="outside",
+                    marker=dict(line=dict(width=1, color="#292925"))
+                )
+                fig_biv_bar.update_layout(
+                    height=380,
+                    paper_bgcolor="#f7f3e9",
+                    plot_bgcolor="#ffffff",
+                    margin=dict(l=20, r=20, t=35, b=20),
+                    yaxis=dict(range=[0, 2.2], title="Average Saves per Venue"),
+                    xaxis=dict(title="Economic Price Tier"),
+                    coloraxis_showscale=False
+                )
+                st.plotly_chart(fig_biv_bar, use_container_width=True)
+                st.caption(
+                    "Intuitive Bar Chart Alternative: Groups 363 saved venues into 5 economic price brackets rather than unreadable individual points. "
+                    "Notice average saves remain constant between 1.34 and 1.52 saves/venue across all tiers, "
+                    "confirming price does not depress user intent."
+                )
+            else:
+                fig_biv = px.scatter(
+                    biv_df,
+                    x="entry_cost",
+                    y="saves_count",
+                    color="poi_category",
+                    hover_name="name",
+                    hover_data=["city_name"],
+                    color_discrete_sequence=["#982b32", "#365376", "#b79d5b", "#7d6f58", "#4f637b", "#8b7e66", "#292925"],
+                    labels={"entry_cost": "Entry Fee (INR)", "saves_count": "Telemetry Saves Count", "poi_category": "Category"},
+                    title=f"Attraction Entry Fee vs User Saves (All 363 Saved Indian Study POIs, Max INR 2,500)"
+                )
+                fig_biv.update_traces(marker=dict(size=9, opacity=0.8, line=dict(width=1, color="#292925")))
+                fig_biv.update_layout(height=380, paper_bgcolor="#f7f3e9", plot_bgcolor="#ffffff", margin=dict(l=20, r=20, t=35, b=20))
+                st.plotly_chart(fig_biv, use_container_width=True)
+                st.caption("Point Scatter Representation: Each point represents an individual saved study attraction plotted against its entry fee.")
 
     # --------------------------------------------------------------------------
     # TAB 5: Formulas & Syntax Reference

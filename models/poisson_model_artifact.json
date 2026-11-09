@@ -2,7 +2,7 @@
   "metadata": {
     "model_family": "sklearn.linear_model.PoissonRegressor",
     "alpha": 1.0,
-    "trained_at": "2026-11-10T00:59:32.182479",
+    "trained_at": "2026-11-10T01:19:50.048456",
     "target": "weekly_cultural_interactions_per_city",
     "grain": "city_week",
     "study_cities": 45,
