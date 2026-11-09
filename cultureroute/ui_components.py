@@ -117,68 +117,245 @@ def inject_editorial_css() -> None:
         z-index: 99999 !important;
     }}
 
-    /* Sidebar Theme & Controls (fully supporting native open/close toggle) */
+    /* =========================================================================
+       SIDEBAR THEME & CONTROLS: COLLAPSIBLE MINI-RAIL & EXPANDED VIEWS
+       ========================================================================= */
+
+    /* Expanded Sidebar: 260px width with rich branding and full navigation */
     [data-testid="stSidebar"],
     section[data-testid="stSidebar"] {{
         background-color: #f0ebe0 !important;
         border-right: 1.5px solid var(--line) !important;
         box-shadow: 2px 0 12px rgba(41, 41, 37, 0.06) !important;
+        width: 260px !important;
+        min-width: 260px !important;
+        max-width: 260px !important;
+        position: relative !important;
+        transform: none !important;
+        transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }}
 
-    /* Sidebar Collapse Button (inside sidebar header) */
-    [data-testid="stSidebarCollapseButton"] button {{
-        display: inline-flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        background: transparent !important;
-        border: 1px solid transparent !important;
-        color: var(--muted-ink) !important;
-        border-radius: 4px !important;
-        box-shadow: none !important;
-        padding: 4px 6px !important;
-        cursor: pointer !important;
-        transition: all 0.15s ease !important;
-    }}
-    [data-testid="stSidebarCollapseButton"] button:hover {{
-        background: #e5dfd2 !important;
-        color: var(--oxblood) !important;
-        border-color: var(--line) !important;
+    /* Collapsed Sidebar: slim 68px icon rail keeping SVGs visible & interactive */
+    [data-testid="stSidebar"][data-collapsed="true"],
+    section[data-testid="stSidebar"][data-collapsed="true"] {{
+        width: 68px !important;
+        min-width: 68px !important;
+        max-width: 68px !important;
+        transform: none !important;
+        margin-left: 0 !important;
+        overflow-x: hidden !important;
+        background-color: #f0ebe0 !important;
+        border-right: 1.5px solid var(--line) !important;
+        box-shadow: 2px 0 8px rgba(41, 41, 37, 0.06) !important;
     }}
 
-    /* Sidebar Expand Button (visible when sidebar is closed) */
-    [data-testid="stSidebarCollapsedControl"] {{
-        display: inline-flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
+    [data-testid="stSidebar"][data-collapsed="true"] [data-testid="stSidebarContent"] {{
+        width: 68px !important;
+        min-width: 68px !important;
+        max-width: 68px !important;
+        padding: 14px 4px !important;
+        overflow-x: hidden !important;
+    }}
+
+    /* Rail mode elements visibility */
+    .cr-brand-mini {{
+        display: none;
+    }}
+    .cr-brand-full {{
+        display: inline;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-brand-full,
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-brand-subtitle,
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-nav-group-title,
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-nav-link span,
+    [data-testid="stSidebar"][data-collapsed="true"] .sticky {{
+        display: none !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-brand-mini {{
+        display: inline-block !important;
+        font-family: var(--display) !important;
+        font-size: 1.15rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.5px !important;
+        color: var(--red) !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-sidebar-brand {{
+        padding: 4px 0 10px !important;
+        margin-bottom: 8px !important;
+        border-bottom: 1px solid var(--line) !important;
+        text-align: center !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-nav-group {{
+        margin-bottom: 6px !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-nav-link,
+    [data-testid="stSidebar"][data-collapsed="true"] a.cr-nav-link {{
+        width: 44px !important;
+        height: 44px !important;
+        margin: 4px auto !important;
         padding: 0 !important;
-    }}
-
-    [data-testid="stExpandSidebarButton"],
-    button[data-testid="stExpandSidebarButton"] {{
-        display: inline-flex !important;
+        display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        border-radius: 8px !important;
+        transform: none !important;
+        border: 1px solid transparent !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-nav-link svg,
+    [data-testid="stSidebar"][data-collapsed="true"] a.cr-nav-link svg {{
+        margin: 0 !important;
+        width: 20px !important;
+        height: 20px !important;
+        transform: none !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] a.cr-nav-link.is-active,
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-nav-link.is-active {{
+        background-color: var(--yellow) !important;
+        border: 1.5px solid var(--red) !important;
+        box-shadow: 0 2px 5px rgba(50, 43, 28, 0.15) !important;
+        transform: none !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="true"] a.cr-nav-link:hover,
+    [data-testid="stSidebar"][data-collapsed="true"] .cr-nav-link:hover {{
+        background-color: rgba(238, 227, 166, 0.6) !important;
+        border: 1px solid var(--red) !important;
+        transform: scale(1.05) !important;
+    }}
+
+    /* Floating Circular Collapse Button (in Expanded Mode) */
+    [data-testid="stSidebarCollapseButton"] {{
+        position: absolute !important;
+        right: -14px !important;
+        top: 26px !important;
+        z-index: 999999 !important;
+    }}
+    [data-testid="stSidebarCollapseButton"] button {{
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 28px !important;
+        height: 28px !important;
+        min-width: 28px !important;
+        min-height: 28px !important;
+        border-radius: 50% !important;
+        background: var(--red) !important;
+        color: #ffffff !important;
+        border: 2px solid #ffffff !important;
+        box-shadow: 0 2px 6px rgba(41, 41, 37, 0.25) !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        transition: transform 0.15s ease, background-color 0.15s ease !important;
+    }}
+    [data-testid="stSidebarCollapseButton"] button:hover {{
+        background: #782228 !important;
+        transform: scale(1.1) !important;
+    }}
+    [data-testid="stSidebarCollapseButton"] button span {{
+        color: #ffffff !important;
+        font-size: 16px !important;
+    }}
+
+    /* Floating Circular Expand Button (in Collapsed Rail Mode) */
+    [data-testid="stSidebarCollapsedControl"] {{
+        display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
-        background-color: #ffffff !important;
-        color: var(--ink) !important;
-        border: 1px solid var(--line) !important;
-        border-radius: 4px !important;
-        box-shadow: 0 1px 3px rgba(41, 41, 37, 0.08) !important;
-        padding: 4px 8px !important;
+        position: fixed !important;
+        left: 54px !important;
+        top: 26px !important;
+        z-index: 999999 !important;
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+    }}
+    [data-testid="stExpandSidebarButton"],
+    button[data-testid="stExpandSidebarButton"] {{
+        position: fixed !important;
+        left: 54px !important;
+        top: 26px !important;
+        width: 28px !important;
+        height: 28px !important;
+        min-width: 28px !important;
+        min-height: 28px !important;
+        border-radius: 50% !important;
+        background: var(--red) !important;
+        color: #ffffff !important;
+        border: 2px solid #ffffff !important;
+        box-shadow: 0 2px 6px rgba(41, 41, 37, 0.25) !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 999999 !important;
         cursor: pointer !important;
-        z-index: 99999 !important;
-        transition: all 0.15s ease !important;
+        transition: transform 0.15s ease, background-color 0.15s ease !important;
     }}
     [data-testid="stExpandSidebarButton"]:hover,
     button[data-testid="stExpandSidebarButton"]:hover {{
-        background-color: #f7f3e9 !important;
-        color: var(--oxblood) !important;
-        border-color: var(--oxblood) !important;
-        box-shadow: 0 2px 5px rgba(41, 41, 37, 0.12) !important;
+        background: #782228 !important;
+        transform: scale(1.1) !important;
+    }}
+    [data-testid="stExpandSidebarButton"] span,
+    button[data-testid="stExpandSidebarButton"] span {{
+        color: #ffffff !important;
+        font-size: 16px !important;
+    }}
+
+    /* =========================================================================
+       AUTO-STABILIZATION & FLUID RESPONSIVE LAYOUT (NO WASTED LEFT/RIGHT SPACE)
+       ========================================================================= */
+
+    .main,
+    [data-testid="stMain"] {{
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), margin-left 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }}
+
+    /* Dynamic fluid main container widths avoiding wasted margin gaps */
+    [data-testid="stSidebar"][data-collapsed="true"] + div,
+    [data-testid="stSidebar"][data-collapsed="true"] ~ .main,
+    [data-testid="stSidebar"][data-collapsed="true"] ~ [data-testid="stMain"] {{
+        width: calc(100% - 68px) !important;
+        margin-left: 0 !important;
+    }}
+
+    [data-testid="stSidebar"][data-collapsed="false"] + div,
+    [data-testid="stSidebar"][data-collapsed="false"] ~ .main,
+    [data-testid="stSidebar"][data-collapsed="false"] ~ [data-testid="stMain"] {{
+        width: calc(100% - 260px) !important;
+        margin-left: 0 !important;
+    }}
+
+    /* Auto-stabilize block container padding across laptop/desktop screens */
+    .main .block-container,
+    [data-testid="stAppViewBlockContainer"] {{
+        max-width: 100% !important;
+        padding-top: 1.75rem !important;
+        padding-bottom: 3.5rem !important;
+        padding-left: clamp(1.2rem, 2.5vw, 2.8rem) !important;
+        padding-right: clamp(1.2rem, 2.5vw, 2.8rem) !important;
+        box-sizing: border-box !important;
+    }}
+
+    /* Responsive column stabilization preventing squished cards and wrapped badges */
+    [data-testid="stHorizontalBlock"] {{
+        flex-wrap: wrap !important;
+        gap: 0.85rem !important;
+        align-items: stretch !important;
+    }}
+
+    .cr-card, .plan-card, .metric-card {{
+        box-sizing: border-box !important;
+        max-width: 100% !important;
     }}
 
     /* Flat Paper Surface (Dot texture removed per Stage F1) */
@@ -223,12 +400,6 @@ def inject_editorial_css() -> None:
     }}
 
     /* Sidebar Navigation System */
-    [data-testid="stSidebar"] {{
-        background-color: #f0ebe0 !important;
-        border-right: 1.5px solid var(--line) !important;
-        box-shadow: 2px 0 12px rgba(41, 41, 37, 0.06) !important;
-        min-width: 280px !important;
-    }}
 
 
 
@@ -1282,7 +1453,7 @@ def render_sidebar_navigation(active_view: str) -> None:
 
     html = """
     <div class="cr-sidebar-brand">
-        <div class="cr-brand-title">Culture<span>Route</span></div>
+        <div class="cr-brand-title" title="CultureRoute"><span class="cr-brand-full">Culture<span>Route</span></span><span class="cr-brand-mini">CR</span></div>
         <div class="cr-brand-subtitle">DEV AAT · Cultural Tourism Study</div>
     </div>
     <nav class="cr-sidebar-nav" aria-label="Main Navigation">
@@ -1301,7 +1472,7 @@ def render_sidebar_navigation(active_view: str) -> None:
 
             active_attr = ' aria-current="page" class="cr-nav-link is-active"' if is_active else ' class="cr-nav-link"'
             icon_svg = icons.get(key, "")
-            html += f'<a href="?view={key}" target="_self"{active_attr}>{icon_svg}<span>{label}</span></a>'
+            html += f'<a href="?view={key}" target="_self"{active_attr} title="{label}">{icon_svg}<span>{label}</span></a>'
         html += "</div>"
 
     html += """

@@ -434,7 +434,7 @@ elif view_mode == "Discover":
 
         with d_col2:
             # Filters with reset option
-            fc1, fc2, fc3, fc4 = st.columns([1.3, 1.3, 1.4, 0.8])
+            fc1, fc2, fc3, fc4 = st.columns([1.3, 1.3, 1.4, 0.8], vertical_alignment="bottom")
             with fc1:
                 cat_filter = st.selectbox("Category Filter", ["All Categories", "heritage", "museum", "religious", "food", "entertainment", "nature"], key="discover_cat_filter")
             with fc2:
@@ -442,8 +442,6 @@ elif view_mode == "Discover":
             with fc3:
                 step_free_filter = st.checkbox("Step-Free Only", value=False, key="discover_step_free")
             with fc4:
-                st.write("")
-                st.write("")
                 st.button("Reset", key="btn_reset_discover_filters", on_click=reset_discover_filters)
 
         # Load city attractions
@@ -604,13 +602,26 @@ elif view_mode == "Discover":
                         marker=dict(line=dict(width=1, color="#292925"))
                     )
                     fig_bar.update_layout(
-                        height=calc_h,
+                        height=calc_h + 30,
                         paper_bgcolor="#f7f3e9",
                         plot_bgcolor="#ffffff",
                         yaxis=dict(autorange="reversed", title=""),
                         xaxis=dict(title="Distance from City Center (km)"),
-                        margin=dict(l=20, r=40, t=40, b=20),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        margin=dict(l=20, r=30, t=55, b=65),
+                        title=dict(
+                            text=f"{selected_city_name} Attractions Ranked by Distance from City Center",
+                            x=0,
+                            y=0.96,
+                            font=dict(size=14, color="#292925")
+                        ),
+                        legend=dict(
+                            orientation="h",
+                            yanchor="top",
+                            y=-0.18,
+                            xanchor="center",
+                            x=0.5,
+                            title_text=""
+                        )
                     )
                     st.plotly_chart(fig_bar, use_container_width=True)
                     st.caption("Intuitive Bar Chart: Displays each venue's exact distance in km from the municipal center, colored by cultural category, eliminating unreadable overlapping points.")
@@ -640,10 +651,23 @@ elif view_mode == "Discover":
                         )
                         fig_map.update_traces(marker=dict(size=14, opacity=0.9))
                         fig_map.update_layout(
-                            height=440,
+                            height=460,
                             paper_bgcolor="#f7f3e9",
-                            margin=dict(l=0, r=0, t=40, b=0),
-                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                            margin=dict(l=0, r=0, t=55, b=55),
+                            title=dict(
+                                text=f"{selected_city_name} Interactive Map (OpenStreetMap)",
+                                x=0,
+                                y=0.96,
+                                font=dict(size=14, color="#292925")
+                            ),
+                            legend=dict(
+                                orientation="h",
+                                yanchor="top",
+                                y=-0.12,
+                                xanchor="center",
+                                x=0.5,
+                                title_text=""
+                            )
                         )
                         st.plotly_chart(fig_map, use_container_width=True)
                         st.caption("Geographic Map: Placed directly on OpenStreetMap city streets, roads, and landmarks for real-world spatial orientation.")
@@ -1346,12 +1370,10 @@ elif view_mode == "Compare":
                 }
                 st.rerun()
 
-        ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.6, 1.2, 1.3, 1.3])
+        ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.6, 1.2, 1.3, 1.3], vertical_alignment="bottom")
         with ctrl_c1:
             selected_cmp_city = st.selectbox("Select Study City to Compare", all_city_names, index=current_city_idx, key="compare_city_select", on_change=on_cmp_city_dropdown_change)
         with ctrl_c2:
-            st.write("")
-            st.write("")
             if st.button(f"Recalculate {selected_cmp_city}", key="btn_run_compare_city"):
                 new_plans = plan_synthetic_day(city_name=selected_cmp_city, start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
                 st.session_state["plan_snapshot"] = {
@@ -1366,8 +1388,6 @@ elif view_mode == "Compare":
                 }
                 st.rerun()
         with ctrl_c3:
-            st.write("")
-            st.write("")
             if st.button("Load Jaipur Baseline", key="btn_load_jaipur_baseline_cmp"):
                 jaipur_plans = plan_synthetic_day(city_name="Jaipur", start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
                 st.session_state["plan_snapshot"] = {
@@ -1380,10 +1400,9 @@ elif view_mode == "Compare":
                     "is_default_fixture": True,
                     "stale": False
                 }
+                st.session_state["compare_city_select"] = "Jaipur"
                 st.rerun()
         with ctrl_c4:
-            st.write("")
-            st.write("")
             if st.button("Load Agra Preset (4 Stops)", key="btn_load_agra_preset_cmp"):
                 agra_plans = plan_synthetic_day(city_name="Agra", start_time="09:00", max_duration_hours=9.0, budget_inr=1500.0, target_stops=4)
                 st.session_state["plan_snapshot"] = {
@@ -1475,12 +1494,24 @@ elif view_mode == "Compare":
         ])
         fig_cmp_bar.update_layout(
             barmode="group",
-            height=280,
+            height=300,
             paper_bgcolor="#f7f3e9",
             plot_bgcolor="#ffffff",
-            margin=dict(l=20, r=20, t=30, b=20),
-            title=f"Direct Trade-Off Comparison: Plan A vs Plan B ({cmp_city})",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            margin=dict(l=20, r=20, t=55, b=50),
+            title=dict(
+                text=f"Direct Trade-Off Comparison: Plan A vs Plan B ({cmp_city})",
+                x=0,
+                y=0.96,
+                font=dict(size=14, color="#292925")
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.15,
+                xanchor="center",
+                x=0.5,
+                title_text=""
+            )
         )
         st.plotly_chart(fig_cmp_bar, use_container_width=True)
 

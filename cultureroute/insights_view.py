@@ -104,9 +104,9 @@ def render_insights_screen() -> None:
                 height=320,
                 paper_bgcolor="#f7f3e9",
                 plot_bgcolor="#ffffff",
-                margin=dict(l=20, r=20, t=30, b=20),
+                margin=dict(l=20, r=20, t=50, b=45),
                 yaxis=dict(title="Percentage (%)", range=[0, 100]),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title_text="")
             )
             st.plotly_chart(fig_pop, use_container_width=True)
         else:
@@ -263,10 +263,10 @@ def render_insights_screen() -> None:
                 height=360,
                 paper_bgcolor="#f7f3e9",
                 plot_bgcolor="#ffffff",
-                margin=dict(l=20, r=20, t=30, b=20),
+                margin=dict(l=20, r=20, t=50, b=45),
                 xaxis_title="Week Start (Monday)",
                 yaxis_title="Cultural Interactions Count",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title_text="")
             )
             st.plotly_chart(fig_fc, use_container_width=True)
 

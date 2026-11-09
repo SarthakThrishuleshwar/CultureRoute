@@ -196,8 +196,8 @@ def render_model_screen() -> None:
                 height=340,
                 paper_bgcolor="#f7f3e9",
                 plot_bgcolor="#ffffff",
-                margin=dict(l=20, r=20, t=20, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=20, r=20, t=50, b=45),
+                legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, title_text=""),
                 yaxis=dict(title="Error (Interactions / City-Week)", range=[0, 1.6]),
             )
             st.plotly_chart(fig_bar, use_container_width=True)
