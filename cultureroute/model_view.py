@@ -36,21 +36,34 @@ from cultureroute.prediction_model import (
 
 
 def render_model_screen() -> None:
-    """Render the dedicated Prediction Model screen with results and city forecasts first."""
+    """Render the Prediction Model standby notice (ML feature disabled and on standby)."""
     render_section_banner(
         section_key="model",
-        title_html="Cultural Engagement <em>Prediction Model</em>",
-        subtitle="A regularized Poisson count regression model predicting the next complete week's cultural interactions using 44 city one-hot features and 3 chronological lags.",
-        kicker="07 / SUPERVISED MACHINE LEARNING · DEV SYLLABUS UNIT 3 · STAGE P6",
+        title_html="Cultural Engagement <em>Prediction Model (On Standby)</em>",
+        subtitle="Supervised machine learning and model training components are currently placed on standby.",
+        kicker="07 / MACHINE LEARNING COMPONENT · ON STANDBY",
     )
 
-    # Load or generate model artifact
-    artifact = load_model_artifact()
-    if artifact is None:
-        with st.spinner("Training baseline Poisson model and generating artifact..."):
-            train_and_evaluate_poisson_model(alpha=1.0, save_artifact=True)
-            artifact = load_model_artifact()
+    st.warning(
+        "**AI/ML Component On Standby**\n\n"
+        "In accordance with project architecture guidelines, CultureRoute contains no active AI or machine learning components in production. "
+        "The supervised Poisson count regression model, training pipelines, and evaluation routines have been preserved in the codebase "
+        "(`cultureroute/prediction_model.py`, `models/poisson_model_artifact.json`) but are currently on standby.\n\n"
+        "Model training, retraining actions, and model-derived outputs are not available as active product features."
+    )
 
+    st.info(
+        "**Standby Artifact Status:**\n"
+        "• Artifact Location: `models/poisson_model_artifact.json` (Preserved read-only)\n"
+        "• Training Code: `cultureroute/prediction_model.py` (Preserved on standby)\n"
+        "• Retraining Action: Disabled\n"
+        "• Notice: Supervised learning models are held on standby and are not active in user navigation."
+    )
+    return
+
+
+def _render_model_screen_standby_body(artifact: dict) -> None:
+    """Preserved on standby: legacy model presentation view."""
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "1. Dated Predictions (2026-08-17)",
         "2. Holdout Evaluation & Baselines",
@@ -58,27 +71,7 @@ def render_model_screen() -> None:
         "4. Panel & Lineage",
         "5. Features & Time Split",
     ])
-
-    # --------------------------------------------------------------------------
-    # TAB 1: DATED PREDICTIONS (2026-08-17) - RESULTS FIRST
-    # --------------------------------------------------------------------------
     with tab1:
-        st.subheader("1. Dated Predictions for Target Week 2026-08-17")
-        st.markdown(
-            "Forecasts for the week following the synthetic study cutoff (Monday, 17 August 2026), "
-            "constructed exclusively from complete historical weeks up to 16 August 2026 without data leakage."
-        )
-
-        dp = artifact["dated_prediction_2026_08_17"]
-        pred_m1, pred_m2, pred_m3 = st.columns(3)
-        pred_m1.metric("Target Week Start", dp["target_week_start"], "Post-snapshot cutoff")
-        pred_m2.metric("Snapshot History Cutoff", dp["snapshot_cutoff"], "Past-only evidence")
-        pred_m3.metric("Total Nationwide Forecast", f"{dp['total_predicted_interactions']:.2f}", "Expected interactions")
-
-        pred_cities = dp["city_predictions"]
-        pred_df = pd.DataFrame(pred_cities)
-
-        st.markdown("<br>", unsafe_allow_html=True)
         sel_c1, sel_c2 = st.columns([1.3, 0.7])
         with sel_c1:
             st.markdown("**Inspect City-Level Prediction:**")

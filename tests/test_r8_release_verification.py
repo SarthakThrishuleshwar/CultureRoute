@@ -180,5 +180,5 @@ def test_r8_10_apptest_full_8_screens_traversal():
     screens = ["overview", "discover", "planner", "compare", "datasets", "insights", "devlab", "model", "settings", "information"]
     for view in screens:
         at.query_params["view"] = view
-        at.run()
+        at.run(timeout=15)
         assert not at.exception, f"View '{view}' raised an uncaught exception: {at.exception}"

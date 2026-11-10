@@ -2,7 +2,7 @@
 
 A reproducible, high-performance research platform and deterministic day planner developed for the DEV AAT Cultural Tourism Research Study. Built to operationalize **UN Sustainable Development Goal 8, Target 8.9** ("Promote beneficial and sustainable tourism that creates jobs and promotes local culture and products"), CultureRoute unites rigorous statistical inference, constraint-based graph routing, and regularized count regression over verified empirical data across 45 Indian study cities.
 
-The platform operates under a strict two-pack empirical data boundary: **SmartTrip** (`PS-01.db`) and **WanderMatch** (`PS-11.db`), reconciling 48,728 raw records into 24 canonical tables with verified cryptographic integrity, zero black-box assumptions, and zero external network calls.
+The synthetic study uses **SmartTrip** (`PS-01.db`) and **WanderMatch** (`PS-11.db`), reconciling 48,728 rows into 24 distinct tables. A separate six-zone real-place extract supports discovery and a **conditional** planner. See the [current Phase 8 repair and local runbook](docs/PHASE8_REPAIR.md) before using the older study-oriented descriptions below. Real routing uses network access only when an operator explicitly configures a backend. AI/ML stays on standby; there is no deployment.
 
 ---
 
@@ -97,7 +97,7 @@ flowchart TD
 
 ## Empirical Data Foundation
 
-CultureRoute enforces an uncompromising empirical boundary. All active application features, calculations, and visual representations originate exclusively from two verified study packs:
+The synthetic research features use the two audited study packs below. Real-place discovery and conditional planning use separate catalog, evidence, and route stores documented in the [Phase 8 repair](docs/PHASE8_REPAIR.md):
 
 | Study Pack | Archive File | Raw Tables | Raw Rows | SHA-256 Digest |
 | :--- | :--- | :--- | :--- | :--- |
@@ -119,7 +119,7 @@ flowchart LR
 
 ### Audited Invariants & Study Cohort Scope
 - **Study Territory**: 45 Indian study cities (`country_code = 'IN'`).
-- **Attraction Catalog**: 675 attractions in Indian cities, with 211 verified cultural points of interest (classified strictly into `heritage`, `museum`, `religious`, `food`).
+- **Attraction Catalog**: 675 synthetic attractions in Indian study cities, with 211 classified as cultural (`heritage`, `museum`, `religious`, `food`).
 - **Trips & Itineraries**: 411 confirmed non-cancelled trips comprising 3,191 scheduled stops.
 - **User Telemetry**: 6,850 interaction events matched to attractions in study cities.
 - **Events & Festivals**: 236 scheduled festivals with expected footfall records.

@@ -15,20 +15,28 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
+import sqlite3
 import pytest
 from datetime import date
 
 from cultureroute.planner import (
     plan_synthetic_day,
-    plan_real_pilot_day,
+    plan_real_place_day,
     DayPlan,
     PlanStop,
     PlanLeg
 )
-from cultureroute.routing import TransportMode
+from cultureroute.routing import TransportMode, DirectedRouteLeg
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CATALOG_DB = ROOT_DIR / "data" / "real_catalog.db"
+EVIDENCE_DB = ROOT_DIR / "data" / "venue_evidence.db"
+
+
+def test_published_catalog_does_not_duplicate_evidence_or_routes():
+    with sqlite3.connect(CATALOG_DB) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert not tables.intersection({"venue_evidence", "evidence_retractions", "real_route_legs"})
 
 
 def test_jaipur_specification_fixture_exact_reproduction():
@@ -106,66 +114,61 @@ def test_planner_constraints_budget_and_time():
     assert tight_time_plans["most_cultural"] is None
 
 
-def test_real_pilot_day_planner():
-    """Verify day planning for real pilot venues in Karnataka."""
-    assert CATALOG_DB.exists()
-    plans = plan_real_pilot_day(
-        catalog_db=CATALOG_DB,
-        state_or_district="Karnataka",
-        visit_date=date(2026, 8, 15),
-        start_time="09:00",
-        max_duration_hours=8.0,
-        budget_inr=1500.0,
-        target_stops=3,
-        transport_mode=TransportMode.DRIVING
-    )
-    fastest = plans["fastest"]
-    assert fastest is not None
-    assert fastest.namespace == "REAL"
-    assert fastest.total_stops_count == 3
-    assert fastest.cultural_stops_count == 3
-    assert len(fastest.legs) == 2
-    assert all(s.poi_id.startswith("WD:") for s in fastest.stops)
-
-
-def test_real_planner_step_free_filtering():
-    """Verify step-free accessibility requirement prunes venues without verified ramp/elevator access."""
-    # When step-free is required, only venues with verified step-free access are eligible
-    plans = plan_real_pilot_day(
-        catalog_db=CATALOG_DB,
-        state_or_district="Karnataka",
-        visit_date=date(2026, 8, 15),
-        target_stops=3,
-        step_free_required=True
-    )
-    # Since only 1 pilot venue currently has verified step-free access in Karnataka,
-    # target_stops=3 cannot be satisfied, so planner returns None
+def test_real_planner_without_provider_is_honest(tmp_path, monkeypatch):
+    monkeypatch.delenv("CULTUREROUTE_OSRM_DRIVING_URL", raising=False)
+    monkeypatch.delenv("CULTUREROUTE_OSRM_URL", raising=False)
+    plans = plan_real_place_day(catalog_db=CATALOG_DB, evidence_db=EVIDENCE_DB,
+        routes_db=tmp_path / "routes.db", selected_place_ids=["WD:Q825236", "WD:Q3517553"])
     assert plans["fastest"] is None
-    assert plans["most_cultural"] is None
+    assert "routing backend" in plans["infeasible_reason"]
 
 
-def test_real_planner_temporal_closure_exclusion():
-    """Verify venue with temporal closure notice on visit date is pruned from schedule."""
-    # Durga Temple Aihole (WD:Q3517553) is closed for monsoon conservation from 2026-07-01 to 2026-07-31
-    plans_closed_date = plan_real_pilot_day(
-        catalog_db=CATALOG_DB,
-        state_or_district="Karnataka",
-        visit_date=date(2026, 7, 15),
-        target_stops=3
-    )
-    # With Durga Temple closed, only Badami and Pattadakal remain in Bagalkot (2 venues < 3 targets)
-    assert plans_closed_date["fastest"] is None
+def test_real_planner_step_free_filtering(tmp_path):
+    plans = plan_real_place_day(catalog_db=CATALOG_DB, evidence_db=EVIDENCE_DB,
+        routes_db=tmp_path / "routes.db", selected_place_ids=["WD:Q825236", "WD:Q3517553"],
+        target_stops=2, step_free_required=True, allow_network=False)
+    assert plans["fastest"] is None
+    assert "step-free" in plans["infeasible_reason"]
 
 
-def test_synthetic_rejection_in_real_planner():
+def test_documented_friday_closure_exclusion(tmp_path):
+    plans = plan_real_place_day(catalog_db=CATALOG_DB, evidence_db=EVIDENCE_DB,
+        routes_db=tmp_path / "routes.db", selected_place_ids=["WD:Q9141"],
+        visit_date=date(2026, 11, 13), target_stops=1, allow_network=False)
+    assert plans["fastest"] is None
+    assert "documented closed" in plans["infeasible_reason"]
+
+
+def test_synthetic_rejection_in_real_planner(tmp_path):
     """Verify synthetic POI IDs cannot enter real pilot planner."""
     with pytest.raises(ValueError):
         # Passing synthetic city ID or invalid namespace should be rejected
-        plan_real_pilot_day(
-            catalog_db=CATALOG_DB,
-            state_or_district="poi_jai_01",
-            target_stops=3
-        )
+        plan_real_place_day(catalog_db=CATALOG_DB, evidence_db=EVIDENCE_DB,
+            routes_db=tmp_path / "routes.db", selected_place_ids=["poi_jai_01"],
+            target_stops=1, allow_network=False)
+
+
+def test_real_round_trip_uses_directed_return_leg(tmp_path, monkeypatch):
+    def routed(origin_id, origin_lat, origin_lon, destination_id, destination_lat, destination_lon,
+               mode, store, **_):
+        forward = origin_id == "WD:Q825236"
+        minutes = 10 if forward else 15
+        return DirectedRouteLeg(origin_id, destination_id, mode, 20000, minutes * 60,
+            20, minutes, True,
+            polyline_points=[(origin_lat, origin_lon),
+                ((origin_lat + destination_lat) / 2, (origin_lon + destination_lon) / 2),
+                (destination_lat, destination_lon)],
+            source_name="Mock validated directed provider")
+    monkeypatch.setattr("cultureroute.real_planner.compute_directed_leg", routed)
+    args = dict(catalog_db=CATALOG_DB, evidence_db=EVIDENCE_DB,
+        routes_db=tmp_path / "routes.db", selected_place_ids=["WD:Q825236", "WD:Q3517553"],
+        target_stops=2, allow_network=False, user_duration_minutes=60)
+    one_way = plan_real_place_day(**args)["fastest"]
+    return_trip = plan_real_place_day(**args, round_trip=True)["fastest"]
+    assert one_way is not None and return_trip is not None
+    assert len(one_way.legs) == 1 and len(return_trip.legs) == 2
+    assert return_trip.elapsed_minutes == one_way.elapsed_minutes + 15
+    assert return_trip.legs[-1].destination_id == return_trip.stops[0].poi_id
 
 
 def test_day_plan_export_structure():

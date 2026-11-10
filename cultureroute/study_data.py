@@ -107,14 +107,19 @@ def _ensure_extracted_cache() -> Tuple[Path, Path]:
 
 
 @contextmanager
-def open_study_databases() -> Generator[Tuple[sqlite3.Connection, sqlite3.Connection], None, None]:
+def open_study_databases(
+    smart_db_path: Optional[Path] = None,
+    wander_db_path: Optional[Path] = None
+) -> Generator[Tuple[sqlite3.Connection, sqlite3.Connection], None, None]:
     """Open persistent extracted SQLite databases in read-only mode with zero unzipping overhead."""
-    if not SMART_TRIP_ZIP.exists():
-        raise FileNotFoundError(f"Missing SmartTrip archive at {SMART_TRIP_ZIP}")
-    if not WANDER_MATCH_ZIP.exists():
-        raise FileNotFoundError(f"Missing WanderMatch archive at {WANDER_MATCH_ZIP}")
-
-    smart_path, wander_path = _ensure_extracted_cache()
+    if smart_db_path and wander_db_path:
+        smart_path, wander_path = smart_db_path, wander_db_path
+    else:
+        if not SMART_TRIP_ZIP.exists():
+            raise FileNotFoundError(f"Missing SmartTrip archive at {SMART_TRIP_ZIP}")
+        if not WANDER_MATCH_ZIP.exists():
+            raise FileNotFoundError(f"Missing WanderMatch archive at {WANDER_MATCH_ZIP}")
+        smart_path, wander_path = _ensure_extracted_cache()
 
     smart_conn: sqlite3.Connection | None = None
     wander_conn: sqlite3.Connection | None = None

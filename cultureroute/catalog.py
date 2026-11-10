@@ -56,6 +56,9 @@ class RealCatalogStore:
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA cache_size = -64000")  # 64 MB page cache
         return conn
 
     def _init_db(self) -> None:
@@ -112,6 +115,18 @@ class RealCatalogStore:
 
                 CREATE INDEX IF NOT EXISTS idx_places_category ON places(cultural_category);
                 CREATE INDEX IF NOT EXISTS idx_places_lat_lon ON places(latitude, longitude);
+                CREATE TABLE IF NOT EXISTS extract_registry (
+                    extract_id TEXT PRIMARY KEY,
+                    zone_name TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    extract_date TEXT NOT NULL,
+                    import_date TEXT NOT NULL,
+                    rows_settlements INTEGER NOT NULL DEFAULT 0,
+                    rows_places INTEGER NOT NULL DEFAULT 0,
+                    sha256 TEXT NOT NULL,
+                    error_message TEXT
+                );
             """)
 
     def set_metadata(self, key: str, value: str) -> None:
@@ -130,15 +145,43 @@ class RealCatalogStore:
             rows = conn.execute("SELECT key, value FROM metadata").fetchall()
             return {r["key"]: r["value"] for r in rows}
 
-    def insert_settlement(self, s: RealSettlement) -> None:
+    def record_extract_status(
+        self,
+        extract_id: str,
+        zone_name: str,
+        filename: str,
+        status: str,
+        extract_date: str,
+        import_date: str,
+        rows_settlements: int = 0,
+        rows_places: int = 0,
+        sha256: str = "",
+        error_message: Optional[str] = None
+    ) -> None:
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO settlements (
-                    settlement_id, name, name_lower, local_names_json, state, district,
-                    sub_district, settlement_type, latitude, longitude, source_name,
-                    source_url, source_record_id, extract_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO extract_registry (
+                    extract_id, zone_name, filename, status, extract_date, import_date,
+                    rows_settlements, rows_places, sha256, error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
+                extract_id, zone_name, filename, status, extract_date, import_date,
+                rows_settlements, rows_places, sha256, error_message
+            ))
+
+    def get_extract_registry(self) -> List[Dict[str, object]]:
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM extract_registry ORDER BY import_date ASC, zone_name ASC").fetchall()
+            return [dict(r) for r in rows]
+
+    def insert_settlement(self, s: RealSettlement) -> None:
+        self.insert_settlements_batch([s])
+
+    def insert_settlements_batch(self, settlements: List[RealSettlement]) -> None:
+        if not settlements:
+            return
+        params = [
+            (
                 s.settlement_id,
                 s.name,
                 s.name.lower().strip(),
@@ -153,19 +196,26 @@ class RealCatalogStore:
                 s.source_url,
                 s.source_record_id,
                 s.extract_date.isoformat(),
-            ))
+            )
+            for s in settlements
+        ]
+        with self._get_connection() as conn:
+            conn.executemany("""
+                INSERT OR REPLACE INTO settlements (
+                    settlement_id, name, name_lower, local_names_json, state, district,
+                    sub_district, settlement_type, latitude, longitude, source_name,
+                    source_url, source_record_id, extract_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, params)
 
     def insert_place(self, p: RealPlaceRecord) -> None:
-        with self._get_connection() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO places (
-                    source_id, upstream_type, upstream_id, name, local_names_json,
-                    latitude, longitude, state, district, sub_district, settlement_type,
-                    cultural_category, subcategory, raw_tags_json, source_url,
-                    source_extract_date, import_date, last_checked_date,
-                    opening_hours_json, entry_fee_json, accessibility_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+        self.insert_places_batch([p])
+
+    def insert_places_batch(self, places: List[RealPlaceRecord]) -> None:
+        if not places:
+            return
+        params = [
+            (
                 p.source_id,
                 p.upstream_type,
                 p.upstream_id,
@@ -187,10 +237,22 @@ class RealCatalogStore:
                 p.opening_hours.model_dump_json(),
                 p.entry_fee.model_dump_json(),
                 p.accessibility.model_dump_json(),
-            ))
+            )
+            for p in places
+        ]
+        with self._get_connection() as conn:
+            conn.executemany("""
+                INSERT OR REPLACE INTO places (
+                    source_id, upstream_type, upstream_id, name, local_names_json,
+                    latitude, longitude, state, district, sub_district, settlement_type,
+                    cultural_category, subcategory, raw_tags_json, source_url,
+                    source_extract_date, import_date, last_checked_date,
+                    opening_hours_json, entry_fee_json, accessibility_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, params)
 
     def search_settlements(self, query: str) -> List[RealSettlement]:
-        """Search settlements by name with substring matching and state disambiguation."""
+        """Search settlements by name or alternate/local names with substring matching and state disambiguation."""
         clean_q = query.lower().strip()
         if not clean_q:
             return []
@@ -198,10 +260,24 @@ class RealCatalogStore:
         with self._get_connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM settlements
-                WHERE name_lower = ? OR name_lower LIKE ?
-                ORDER BY CASE WHEN name_lower = ? THEN 0 WHEN name_lower LIKE ? THEN 1 ELSE 2 END, name ASC
+                WHERE name_lower = ? OR name_lower LIKE ? OR local_names_json LIKE ?
+                ORDER BY CASE
+                    WHEN name_lower = ? THEN 0
+                    WHEN name_lower LIKE ? THEN 1
+                    ELSE 2
+                END,
+                CASE
+                    WHEN settlement_type IN ('city', 'town') THEN 0
+                    WHEN settlement_type IN ('village') THEN 1
+                    ELSE 2
+                END,
+                CASE
+                    WHEN state != 'India' AND state != '' THEN 0
+                    ELSE 1
+                END,
+                name ASC
                 LIMIT 50
-            """, (clean_q, f"{clean_q}%", clean_q, f"{clean_q}%")).fetchall()
+            """, (clean_q, f"{clean_q}%", f"%{clean_q}%", clean_q, f"{clean_q}%")).fetchall()
 
             return [self._row_to_settlement(r) for r in rows]
 
@@ -212,16 +288,27 @@ class RealCatalogStore:
                 return self._row_to_settlement(row)
             return None
 
+    def get_place_by_id(self, source_id: str) -> Optional[RealPlaceRecord]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM places WHERE source_id = ?", (source_id,)).fetchone()
+            if row:
+                return self._row_to_place(row)
+            return None
+
     def search_nearby_places(
         self,
         lat: float,
         lon: float,
         radius_km: float = 30.0,
-        category: Optional[CulturalCategory] = None
+        category: Optional[CulturalCategory] = None,
+        deduplicate: bool = True
     ) -> List[Tuple[RealPlaceRecord, float]]:
         """Search places within a radius using bounding-box filtering and haversine distance.
 
         Returns a list of (RealPlaceRecord, distance_km) ordered by proximity.
+        If deduplicate=True, near-duplicate records (same normalized name within 2 km, e.g. a complex
+        and its duplicate/constituent UNESCO centroid) are deduplicated, keeping the most specific/detailed
+        record while preserving upstream IDs in the database.
         """
         deg_lat = radius_km / 111.0
         deg_lon = radius_km / (111.0 * max(0.1, math.cos(math.radians(lat))))
@@ -253,7 +340,69 @@ class RealCatalogStore:
                 results.append((place, round(dist, 2)))
 
         results.sort(key=lambda x: x[1])
-        return results
+
+        if not deduplicate or len(results) <= 1:
+            return results
+
+        # Deduplicate near-duplicates with matching normalized names within 2.0 km
+        # IMPORTANT: Protect distinct constituent attractions from merging with parent complexes.
+        # Merging only occurs when:
+        # 1. Distance <= 2.0 km, AND
+        # 2. Both venues are the exact same venue under duplicate source IDs (e.g. duplicate Wikidata or OSM node/way)
+        #    where the core distinctive nouns match exactly, OR one is an explicit centroid with identical name.
+        # Distinct constituent structures (e.g. 'Kandariya Mahadeva Temple' vs 'Khajuraho Group of Monuments')
+        # have specific identifying words and MUST be kept distinct.
+        import re
+        def _tokenize_name(name: str) -> set[str]:
+            clean = re.sub(r"[,\-\(\)\'\"]", " ", name.lower())
+            stop = {"the", "of", "at", "in", "and", "a", "an", "group", "monuments", "complex", "site", "places"}
+            return {t for t in clean.split() if t not in stop and len(t) > 2}
+
+        # Words designating specific constituent buildings/shrines
+        constituent_designators = {
+            "kandariya", "lakshmana", "varaha", "duladeo", "matangeshwar", "chaturbhuj",
+            "parshvanatha", "adinatha", "ghantai", "shantinatha", "javari", "vamana",
+            "chasing", "natamandira", "bhogamandapa", "jagannath", "mayadevi", "chhaya"
+        }
+
+        deduped: List[Tuple[RealPlaceRecord, float]] = []
+        for place, dist in results:
+            p_tokens = _tokenize_name(place.name)
+            is_dup = False
+            for existing_p, existing_dist in deduped:
+                # If within 2.0 km
+                if haversine_distance_km(place.latitude, place.longitude, existing_p.latitude, existing_p.longitude) <= 2.0:
+                    e_tokens = _tokenize_name(existing_p.name)
+
+                    # Check for constituent site vs complex: if one contains a constituent designator not in the other, DO NOT MERGE
+                    p_const = p_tokens & constituent_designators
+                    e_const = e_tokens & constituent_designators
+                    if p_const != e_const:
+                        continue
+
+                    # Exact token match -> confirmed duplicate
+                    if p_tokens and e_tokens and p_tokens == e_tokens:
+                        is_dup = True
+                        break
+
+                    # One name is an exact subset of the other, but both share the core proper noun (e.g. "Konark Sun Temple" and "Sun Temple, Konark")
+                    core_proper = p_tokens & e_tokens
+                    # Require at least one substantial proper noun (length >= 4) that is not a generic descriptor or test artifact
+                    generics = {"sun", "temple", "temples", "monument", "monuments", "palace", "fort", "mosque", "church", "monastery", "mahal", "test", "synthetic"}
+                    substantive_common = [t for t in core_proper if t not in generics and len(t) >= 4]
+
+                    if substantive_common:
+                        # If both are essentially describing the exact same monument
+                        non_common_p = [t for t in (p_tokens - core_proper) if t not in generics]
+                        non_common_e = [t for t in (e_tokens - core_proper) if t not in generics]
+                        if not non_common_p and not non_common_e:
+                            is_dup = True
+                            break
+
+            if not is_dup:
+                deduped.append((place, dist))
+
+        return deduped
 
     def get_counts(self) -> Dict[str, int]:
         with self._get_connection() as conn:

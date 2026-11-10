@@ -1,6 +1,6 @@
 # CultureRoute technical requirements document
 
-**Status:** Proposed technical design · No connected application is present in this workspace  
+**Status:** Original design plus [current implementation and limits](PHASE8_REPAIR.md). The local Streamlit application runs with separate synthetic study, real catalog, evidence, and route stores.
 **Inputs:** [`PRD.md`](PRD.md), [`DATABASE.md`](DATABASE.md), `CultureRoute_DEV_AAT_Project_Specification.pdf` pp. 2–8
 
 ## 1. System boundary and planned stack

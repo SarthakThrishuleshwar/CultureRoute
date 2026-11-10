@@ -1,147 +1,102 @@
-"""Tests for CultureRoute Phase 7: Directed Road and Walking Routes.
+"""Routing contract tests with fictional coordinates and mocked provider responses."""
 
-Verifies:
-1. DirectedRouteLeg typed data contract and units (meters, seconds, km, minutes).
-2. Driving vs Walking mode constraints (walking > 25km returns UNREACHABLE_BY_MODE).
-3. Walking under 25km is available.
-4. Asymmetric route directional integrity (A -> B != B -> A).
-5. Identity leg (A -> A) has 0 distance and 0 duration.
-6. Local SQLite cache (real_route_legs) persistence and deterministic offline retrieval.
-"""
+from datetime import datetime, timezone
+import json
+import sqlite3
 
-from __future__ import annotations
-
-from pathlib import Path
 import pytest
 
-from cultureroute.routing import (
-    DirectedRouteLeg,
-    RouteLegStore,
-    TransportMode,
-    compute_directed_leg,
-    MAX_WALKING_DISTANCE_KM
-)
+from cultureroute.routing import RouteLegStore, TransportMode, compute_directed_leg
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-CATALOG_DB = ROOT_DIR / "data" / "real_catalog.db"
+A = (12.0000, 77.0000)
+B = (12.0100, 77.0100)
+URL = "https://configured.example.invalid"
 
 
-@pytest.fixture
-def route_store():
-    assert CATALOG_DB.exists(), "real_catalog.db must exist"
-    return RouteLegStore(CATALOG_DB)
+class Reply:
+    status_code = 200
+    text = ""
+
+    def __init__(self, duration=300, points=None):
+        self.duration = duration
+        self.points = points or [[77.0, 12.0], [77.005, 12.005], [77.01, 12.01]]
+
+    def json(self):
+        return {"code": "Ok", "routes": [{"distance": 2500, "duration": self.duration,
+                                           "geometry": {"coordinates": self.points}}]}
 
 
-def test_driving_leg_between_pilot_venues(route_store):
-    """Verify driving route between Badami Cave Temples and Durga Temple Aihole."""
-    leg = compute_directed_leg(
-        origin_id="WD:Q825236",
-        origin_lat=15.9183,
-        origin_lon=75.6850,
-        destination_id="WD:Q3517553",
-        destination_lat=16.0207,
-        destination_lon=75.8819,
-        mode=TransportMode.DRIVING,
-        store=route_store,
-        allow_network=False
-    )
-    assert leg.is_available is True
-    assert leg.mode == TransportMode.DRIVING
-    assert leg.distance_km > 25.0  # Approx 30-38 km
-    assert leg.distance_meters == round(leg.distance_km * 1000, 1)
-    assert leg.duration_minutes > 30.0
-    assert leg.duration_seconds == round(leg.duration_minutes * 60, 1)
-    assert len(leg.polyline_points) >= 2
-    assert "Directed Routing Engine" in leg.source_name or "Calibrated" in leg.source_name
+def route(store, reverse=False, mode=TransportMode.DRIVING, **kwargs):
+    origin, dest = (B, A) if reverse else (A, B)
+    return compute_directed_leg("OSM:node/fictional-B" if reverse else "OSM:node/fictional-A",
+        *origin, "OSM:node/fictional-A" if reverse else "OSM:node/fictional-B",
+        *dest, mode, store=store, **kwargs)
 
 
-def test_walking_exceeding_threshold_is_unreachable(route_store):
-    """Verify walking over 25 km returns explicit UNREACHABLE_BY_MODE failure."""
-    leg = compute_directed_leg(
-        origin_id="WD:Q825236",
-        origin_lat=15.9183,
-        origin_lon=75.6850,
-        destination_id="WD:Q3517553",
-        destination_lat=16.0207,
-        destination_lon=75.8819,
-        mode=TransportMode.WALKING,
-        store=route_store,
-        allow_network=False
-    )
-    assert leg.is_available is False
-    assert leg.mode == TransportMode.WALKING
-    assert "UNREACHABLE_BY_MODE" in leg.failure_reason
-    assert "exceeds maximum realistic walking threshold" in leg.failure_reason
+def test_unconfigured_provider_is_honest(tmp_path, monkeypatch):
+    monkeypatch.delenv("CULTUREROUTE_OSRM_DRIVING_URL", raising=False)
+    monkeypatch.delenv("CULTUREROUTE_OSRM_URL", raising=False)
+    leg = route(RouteLegStore(tmp_path / "routes.db"), allow_network=True)
+    assert not leg.is_available and "ROUTING_PROVIDER_UNAVAILABLE" in leg.failure_reason
 
 
-def test_walking_under_threshold_is_available(route_store):
-    """Verify walking leg under 25 km (Aihole to Pattadakal ~13 km) is available."""
-    leg = compute_directed_leg(
-        origin_id="WD:Q3517553",
-        origin_lat=16.0207,
-        origin_lon=75.8819,
-        destination_id="SETTLE:IN:PTD",
-        destination_lat=15.9492,
-        destination_lon=75.8169,
-        mode=TransportMode.WALKING,
-        store=route_store,
-        allow_network=False
-    )
-    assert leg.is_available is True
-    assert leg.distance_km < MAX_WALKING_DISTANCE_KM
-    assert leg.duration_minutes > 100.0  # Approx 2.5 - 3 hours
+def test_directed_cache_uses_actual_provider_geometry(tmp_path, monkeypatch):
+    store = RouteLegStore(tmp_path / "routes.db")
+    calls = []
+
+    def fake_get(url, **_):
+        calls.append(url)
+        if "77.010000,12.010000;77.000000,12.000000" in url:
+            return Reply(360, [[77.01, 12.01], [77.005, 12.005], [77.0, 12.0]])
+        return Reply(300)
+
+    monkeypatch.setattr("cultureroute.routing.requests.get", fake_get)
+    forward = route(store, provider_url=URL)
+    reverse = route(store, reverse=True, provider_url=URL)
+    assert forward.is_available and reverse.is_available
+    assert forward.duration_seconds == 300 and reverse.duration_seconds == 360
+    assert len(forward.polyline_points) == 3 and len(calls) == 2
+    assert route(store, allow_network=False).duration_seconds == 300
+    assert route(store, reverse=True, allow_network=False).duration_seconds == 360
+    assert len(calls) == 2
 
 
-def test_directional_asymmetry_and_identity_leg(route_store):
-    """Verify identity leg (A -> A) is zero, and A -> B differs from B -> A."""
-    # Identity
-    ident_leg = compute_directed_leg(
-        origin_id="WD:Q825236",
-        origin_lat=15.9183,
-        origin_lon=75.6850,
-        destination_id="WD:Q825236",
-        destination_lat=15.9183,
-        destination_lon=75.6850,
-        mode=TransportMode.DRIVING,
-        store=route_store,
-        allow_network=False
-    )
-    assert ident_leg.distance_km == 0.0
-    assert ident_leg.duration_minutes == 0.0
-    assert ident_leg.is_available is True
-
-    # Asymmetry
-    forward = compute_directed_leg(
-        origin_id="WD:Q825236",
-        origin_lat=15.9183,
-        origin_lon=75.6850,
-        destination_id="WD:Q3517553",
-        destination_lat=16.0207,
-        destination_lon=75.8819,
-        mode=TransportMode.DRIVING,
-        store=route_store,
-        allow_network=False
-    )
-    reverse = compute_directed_leg(
-        origin_id="WD:Q3517553",
-        origin_lat=16.0207,
-        origin_lon=75.8819,
-        destination_id="WD:Q825236",
-        destination_lat=15.9183,
-        destination_lon=75.6850,
-        mode=TransportMode.DRIVING,
-        store=route_store,
-        allow_network=False
-    )
-    assert forward.origin_id == reverse.destination_id
-    assert forward.destination_id == reverse.origin_id
-    # Asymmetric travel time due to elevation/direction
-    assert forward.duration_minutes != reverse.duration_minutes
+def test_two_point_legacy_row_never_becomes_routed_leg(tmp_path):
+    store = RouteLegStore(tmp_path / "routes.db")
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute("""INSERT INTO real_route_legs
+            (origin_id,destination_id,mode,distance_meters,duration_seconds,distance_km,
+             duration_minutes,is_available,geometry_json,source_name,source_version,computed_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("OSM:node/fictional-A", "OSM:node/fictional-B", "DRIVING", 2500, 300,
+             2.5, 5, 1, json.dumps([A, B]), "OSRM Driving Engine (hand entered)", "unknown",
+             datetime.now(timezone.utc).isoformat()))
+    assert not route(store, allow_network=False).is_available
 
 
-def test_sqlite_route_persistence(route_store):
-    """Verify route legs stored in SQLite can be retrieved offline."""
-    cached = route_store.get_cached_leg("WD:Q825236", "WD:Q3517553", TransportMode.DRIVING)
-    assert cached is not None
-    assert cached.distance_km > 20.0
-    assert cached.is_available is True
+def test_walking_requires_separate_verified_profile(tmp_path, monkeypatch):
+    store = RouteLegStore(tmp_path / "routes.db")
+    monkeypatch.delenv("CULTUREROUTE_WALKING_PROFILE_VERIFIED", raising=False)
+    assert route(store, mode=TransportMode.WALKING, provider_url=URL).failure_reason == "WALKING_PROFILE_UNVERIFIED"
+    monkeypatch.setenv("CULTUREROUTE_WALKING_PROFILE_VERIFIED", "1")
+    monkeypatch.setattr("cultureroute.routing.requests.get", lambda *_a, **_k: Reply())
+    leg = route(store, mode=TransportMode.WALKING, provider_url=URL)
+    assert leg.is_available and len(leg.polyline_points) == 3
+
+
+def test_malformed_geometry_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr("cultureroute.routing.requests.get", lambda *_a, **_k: Reply(points=[[77, 12], [77.01, 12.01]]))
+    leg = route(RouteLegStore(tmp_path / "routes.db"), provider_url=URL)
+    assert not leg.is_available and leg.failure_reason == "INVALID_ROUTE_RESPONSE"
+
+
+def test_provider_timeout_creates_no_cache_row(tmp_path, monkeypatch):
+    import requests
+    store = RouteLegStore(tmp_path / "routes.db")
+    def timeout(*_a, **_k):
+        raise requests.Timeout("fictional timeout")
+    monkeypatch.setattr("cultureroute.routing.requests.get", timeout)
+    leg = route(store, provider_url=URL)
+    assert not leg.is_available
+    with sqlite3.connect(store.db_path) as conn:
+        assert conn.execute("SELECT count(*) FROM real_route_legs").fetchone()[0] == 0

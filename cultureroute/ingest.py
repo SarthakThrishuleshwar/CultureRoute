@@ -603,20 +603,369 @@ VERIFIED_CULTURAL_SITES = [
 ]
 
 
+class OsmStreamingImporter:
+    """Streams OpenStreetMap PBF or XML extracts using pyosmium, extracting settlements and cultural attractions.
+
+    Supports:
+    - Nodes: Points of interest, settlement center nodes, shrine/heritage markers.
+    - Ways: Polygons and building footprints (e.g. temples, forts, palaces), using average coordinate centroid.
+    - Relations: Multi-polygon complexes, resolving representative coordinates from member ways/nodes.
+    Records separate object-type counts and rejection metrics.
+    """
+
+    def __init__(self, temp_store: RealCatalogStore, boundary_val: IndiaBoundaryValidator, import_dt: date, extract_dt: Optional[date] = None):
+        self.store = temp_store
+        self.boundary = boundary_val
+        self.import_dt = import_dt
+        self.extract_dt = extract_dt or import_dt
+
+        # Object-type specific scan counters
+        self.nodes_scanned = 0
+        self.ways_scanned = 0
+        self.relations_scanned = 0
+
+        # Import counts by object type
+        self.settlements_nodes_imported = 0
+        self.settlements_ways_imported = 0
+        self.attractions_nodes_imported = 0
+        self.attractions_ways_imported = 0
+        self.attractions_relations_imported = 0
+
+        # Category-specific attraction counts
+        self.attractions_by_category: Dict[str, int] = {
+            "heritage": 0,
+            "religious": 0,
+            "museum": 0,
+            "food": 0,
+        }
+
+        # Rejection metrics
+        self.rejected_boundary_nodes = 0
+        self.rejected_boundary_ways = 0
+        self.rejected_boundary_relations = 0
+        self.rejected_non_cultural = 0
+        self.rejected_missing_geometry = 0
+
+    def run_import(self, osm_path: Path) -> Dict[str, object]:
+        try:
+            import osmium
+        except ImportError:
+            raise RuntimeError("pyosmium is required for OSM PBF/XML ingestion. Install with `pip install osmium`.")
+
+        class _Pass1Handler(osmium.SimpleHandler):
+            """Pass 1: Ingest nodes and ways with direct locations, while indexing cultural way centroids for relation resolution."""
+            MAX_WAY_CENTROIDS = 100000  # Cap way centroids in memory (~5 MB max)
+            BATCH_SIZE = 2000
+
+            def __init__(self, outer: OsmStreamingImporter):
+                super().__init__()
+                self.outer = outer
+                self.cultural_way_centroids: Dict[int, Tuple[float, float]] = {}
+                self.settlement_batch: List[RealSettlement] = []
+                self.place_batch: List[RealPlaceRecord] = []
+
+            def _flush_settlements(self) -> None:
+                if self.settlement_batch:
+                    self.outer.store.insert_settlements_batch(self.settlement_batch)
+                    self.settlement_batch.clear()
+
+            def _flush_places(self) -> None:
+                if self.place_batch:
+                    self.outer.store.insert_places_batch(self.place_batch)
+                    self.place_batch.clear()
+
+            def _flush_all(self) -> None:
+                self._flush_settlements()
+                self._flush_places()
+
+            def node(self, n):
+                self.outer.nodes_scanned += 1
+                if len(n.tags) == 0 or not n.location.valid():
+                    return
+
+                tags = {tag.k: tag.v for tag in n.tags}
+                lat = n.location.lat
+                lon = n.location.lon
+                name = tags.get("name") or tags.get("name:en")
+                if not name:
+                    return
+
+                # Check settlement
+                place_type = tags.get("place", "").lower()
+                if place_type in ["city", "town", "village", "hamlet", "suburb", "locality"]:
+                    if self.outer.boundary.is_inside(lat, lon):
+                        sid = f"OSM:node/{n.id}"
+                        local_names = {tag.k.split(":")[-1]: tag.v for tag in n.tags if tag.k.startswith("name:") and tag.k != "name:en"}
+                        settle = RealSettlement(
+                            settlement_id=sid,
+                            name=name,
+                            local_names=local_names,
+                            state=tags.get("is_in:state", tags.get("addr:state", "India")),
+                            district=tags.get("is_in:district", tags.get("addr:district")),
+                            sub_district=tags.get("is_in:subdistrict"),
+                            settlement_type=place_type,
+                            latitude=lat,
+                            longitude=lon,
+                            source_name="OpenStreetMap PBF Extract",
+                            source_url=f"https://www.openstreetmap.org/node/{n.id}",
+                            source_record_id=str(n.id),
+                            extract_date=self.outer.extract_dt,
+                        )
+                        self.settlement_batch.append(settle)
+                        self.outer.settlements_nodes_imported += 1
+                        if len(self.settlement_batch) >= self.BATCH_SIZE:
+                            self._flush_settlements()
+                    else:
+                        self.outer.rejected_boundary_nodes += 1
+
+                # Check cultural attraction
+                classified = classify_cultural_tags(tags)
+                if classified:
+                    if self.outer.boundary.is_inside(lat, lon):
+                        cat, subcat = classified
+                        pid = f"OSM:node/{n.id}"
+                        local_names = {tag.k.split(":")[-1]: tag.v for tag in n.tags if tag.k.startswith("name:") and tag.k != "name:en"}
+                        place = RealPlaceRecord(
+                            source_id=pid,
+                            upstream_type="node",
+                            upstream_id=str(n.id),
+                            name=name,
+                            local_names=local_names,
+                            latitude=lat,
+                            longitude=lon,
+                            state=tags.get("addr:state", "India"),
+                            district=tags.get("addr:district"),
+                            sub_district=tags.get("addr:subdistrict"),
+                            settlement_type="unknown",
+                            cultural_category=cat,
+                            subcategory=subcat,
+                            raw_tags=tags,
+                            source_url=f"https://www.openstreetmap.org/node/{n.id}",
+                            source_extract_date=self.outer.extract_dt,
+                            import_date=self.outer.import_dt,
+                            last_checked_date=self.outer.extract_dt,
+                            opening_hours=OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+                            entry_fee=EntryFeeDetail(status=FeeStatus.UNKNOWN),
+                            accessibility=AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+                        )
+                        self.place_batch.append(place)
+                        self.outer.attractions_nodes_imported += 1
+                        self.outer.attractions_by_category[cat.value] += 1
+                        if len(self.place_batch) >= self.BATCH_SIZE:
+                            self._flush_places()
+                    else:
+                        self.outer.rejected_boundary_nodes += 1
+                else:
+                    self.outer.rejected_non_cultural += 1
+
+            def way(self, w):
+                self.outer.ways_scanned += 1
+                tags = {tag.k: tag.v for tag in w.tags}
+                if not tags:
+                    return
+
+                # Calculate representative centroid from way nodes
+                pts = [(n.location.lat, n.location.lon) for n in w.nodes if n.location.valid()]
+                if not pts:
+                    self.outer.rejected_missing_geometry += 1
+                    return
+
+                lat = sum(p[0] for p in pts) / len(pts)
+                lon = sum(p[1] for p in pts) / len(pts)
+
+                name = tags.get("name") or tags.get("name:en")
+                if not name:
+                    return
+
+                # Check cultural attraction on way (temple footprint, fort wall, monument)
+                classified = classify_cultural_tags(tags)
+                if classified:
+                    # Cache cultural way centroid with memory bound
+                    if len(self.cultural_way_centroids) < self.MAX_WAY_CENTROIDS:
+                        self.cultural_way_centroids[w.id] = (lat, lon)
+
+                    if self.outer.boundary.is_inside(lat, lon):
+                        cat, subcat = classified
+                        pid = f"OSM:way/{w.id}"
+                        local_names = {tag.k.split(":")[-1]: tag.v for tag in w.tags if tag.k.startswith("name:") and tag.k != "name:en"}
+                        place = RealPlaceRecord(
+                            source_id=pid,
+                            upstream_type="way",
+                            upstream_id=str(w.id),
+                            name=name,
+                            local_names=local_names,
+                            latitude=lat,
+                            longitude=lon,
+                            state=tags.get("addr:state", "India"),
+                            district=tags.get("addr:district"),
+                            sub_district=tags.get("addr:subdistrict"),
+                            settlement_type="unknown",
+                            cultural_category=cat,
+                            subcategory=subcat,
+                            raw_tags=tags,
+                            source_url=f"https://www.openstreetmap.org/way/{w.id}",
+                            source_extract_date=self.outer.extract_dt,
+                            import_date=self.outer.import_dt,
+                            last_checked_date=self.outer.extract_dt,
+                            opening_hours=OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+                            entry_fee=EntryFeeDetail(status=FeeStatus.UNKNOWN),
+                            accessibility=AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+                        )
+                        self.place_batch.append(place)
+                        self.outer.attractions_ways_imported += 1
+                        self.outer.attractions_by_category[cat.value] += 1
+                        if len(self.place_batch) >= self.BATCH_SIZE:
+                            self._flush_places()
+                    else:
+                        self.outer.rejected_boundary_ways += 1
+                else:
+                    self.outer.rejected_non_cultural += 1
+
+                # Check settlement polygon (e.g. residential area, town boundary)
+                place_type = tags.get("place", "").lower()
+                if place_type in ["city", "town", "village", "hamlet", "suburb", "locality"]:
+                    if self.outer.boundary.is_inside(lat, lon):
+                        sid = f"OSM:way/{w.id}"
+                        local_names = {tag.k.split(":")[-1]: tag.v for tag in w.tags if tag.k.startswith("name:") and tag.k != "name:en"}
+                        settle = RealSettlement(
+                            settlement_id=sid,
+                            name=name,
+                            local_names=local_names,
+                            state=tags.get("is_in:state", tags.get("addr:state", "India")),
+                            district=tags.get("is_in:district", tags.get("addr:district")),
+                            sub_district=tags.get("is_in:subdistrict"),
+                            settlement_type=place_type,
+                            latitude=lat,
+                            longitude=lon,
+                            source_name="OpenStreetMap PBF Extract",
+                            source_url=f"https://www.openstreetmap.org/way/{w.id}",
+                            source_record_id=str(w.id),
+                            extract_date=self.outer.extract_dt,
+                        )
+                        self.settlement_batch.append(settle)
+                        self.outer.settlements_ways_imported += 1
+                        if len(self.settlement_batch) >= self.BATCH_SIZE:
+                            self._flush_settlements()
+                    else:
+                        self.outer.rejected_boundary_ways += 1
+
+            def relation(self, r):
+                self.outer.relations_scanned += 1
+                tags = {tag.k: tag.v for tag in r.tags}
+                if not tags:
+                    return
+
+                name = tags.get("name") or tags.get("name:en")
+                if not name:
+                    return
+
+                classified = classify_cultural_tags(tags)
+                if not classified:
+                    self.outer.rejected_non_cultural += 1
+                    return
+
+                # Resolve representative point from resolved member ways
+                member_pts = []
+                for m in r.members:
+                    if m.type == "w" and m.ref in self.cultural_way_centroids:
+                        member_pts.append(self.cultural_way_centroids[m.ref])
+
+                if not member_pts:
+                    self.outer.rejected_missing_geometry += 1
+                    return
+
+                lat = sum(p[0] for p in member_pts) / len(member_pts)
+                lon = sum(p[1] for p in member_pts) / len(member_pts)
+
+                if self.outer.boundary.is_inside(lat, lon):
+                    cat, subcat = classified
+                    pid = f"OSM:relation/{r.id}"
+                    local_names = {tag.k.split(":")[-1]: tag.v for tag in r.tags if tag.k.startswith("name:") and tag.k != "name:en"}
+                    place = RealPlaceRecord(
+                        source_id=pid,
+                        upstream_type="relation",
+                        upstream_id=str(r.id),
+                        name=name,
+                        local_names=local_names,
+                        latitude=lat,
+                        longitude=lon,
+                        state=tags.get("addr:state", "India"),
+                        district=tags.get("addr:district"),
+                        sub_district=tags.get("addr:subdistrict"),
+                        settlement_type="unknown",
+                        cultural_category=cat,
+                        subcategory=subcat,
+                        raw_tags=tags,
+                        source_url=f"https://www.openstreetmap.org/relation/{r.id}",
+                        source_extract_date=self.outer.extract_dt,
+                        import_date=self.outer.import_dt,
+                        last_checked_date=self.outer.extract_dt,
+                        opening_hours=OpeningHoursDetail(status=VerificationStatus.UNKNOWN),
+                        entry_fee=EntryFeeDetail(status=FeeStatus.UNKNOWN),
+                        accessibility=AccessibilityDetail(status=AccessibilityStatus.UNKNOWN),
+                    )
+                    self.place_batch.append(place)
+                    self.outer.attractions_relations_imported += 1
+                    self.outer.attractions_by_category[cat.value] += 1
+                    if len(self.place_batch) >= self.BATCH_SIZE:
+                        self._flush_places()
+                else:
+                    self.outer.rejected_boundary_relations += 1
+
+        handler = _Pass1Handler(self)
+        handler.apply_file(str(osm_path), locations=True)
+        handler._flush_all()
+
+        total_settlements = self.settlements_nodes_imported + self.settlements_ways_imported
+        total_attractions = (
+            self.attractions_nodes_imported +
+            self.attractions_ways_imported +
+            self.attractions_relations_imported
+        )
+
+        return {
+            "nodes_scanned": self.nodes_scanned,
+            "ways_scanned": self.ways_scanned,
+            "relations_scanned": self.relations_scanned,
+            "settlements_imported": total_settlements,
+            "settlements_by_type": {
+                "nodes": self.settlements_nodes_imported,
+                "ways": self.settlements_ways_imported,
+            },
+            "attractions_imported": total_attractions,
+            "attractions_by_type": {
+                "nodes": self.attractions_nodes_imported,
+                "ways": self.attractions_ways_imported,
+                "relations": self.attractions_relations_imported,
+            },
+            "attractions_by_category": self.attractions_by_category,
+            "rejected_boundary": {
+                "nodes": self.rejected_boundary_nodes,
+                "ways": self.rejected_boundary_ways,
+                "relations": self.rejected_boundary_relations,
+            },
+            "rejected_non_cultural": self.rejected_non_cultural,
+            "rejected_missing_geometry": self.rejected_missing_geometry,
+        }
+
+
 def run_streaming_import(
     unlocode_csv: Path,
     unesco_json: Optional[Path],
     boundary_geojson: Optional[Path],
     output_db: Path,
-    snapshot_date: str = "2026-11-09"
+    snapshot_date: str = "2026-11-09",
+    osm_pbf: Optional[Path] = None,
+    source_extract_date: Optional[str] = None,
 ) -> Dict[str, object]:
     """Execute atomic streaming import into target SQLite database with verified boundary and count reconciliation."""
-    unlocode_csv = Path(unlocode_csv)
+    unlocode_csv = Path(unlocode_csv) if unlocode_csv else None
     output_db = Path(output_db)
     unesco_json = Path(unesco_json) if unesco_json else None
     boundary_geojson = Path(boundary_geojson) if boundary_geojson else None
+    osm_pbf = Path(osm_pbf) if osm_pbf else None
 
-    if not unlocode_csv.exists():
+    if unlocode_csv and not unlocode_csv.exists():
         raise FileNotFoundError(f"Missing UN/LOCODE CSV at {unlocode_csv}")
 
     if not boundary_geojson or not boundary_geojson.exists():
@@ -627,9 +976,10 @@ def run_streaming_import(
     if not boundary_val.is_available:
         raise RuntimeError(f"Coordinate validation unavailable: boundary geometry in {boundary_geojson} is invalid or empty")
 
-    unlocode_sha = calculate_sha256(unlocode_csv)
+    unlocode_sha = calculate_sha256(unlocode_csv) if unlocode_csv and unlocode_csv.exists() else "none"
     boundary_sha = calculate_sha256(boundary_geojson)
     unesco_sha = calculate_sha256(unesco_json) if unesco_json and unesco_json.exists() else "none"
+    osm_pbf_sha = calculate_sha256(osm_pbf) if osm_pbf and osm_pbf.exists() else "none"
 
     # Stage on the same filesystem directory to ensure atomic replacement
     output_db.parent.mkdir(parents=True, exist_ok=True)
@@ -645,39 +995,40 @@ def run_streaming_import(
         imported_unlocode_count = 0
         rejected_unlocode_boundary_count = 0
 
-        with open(unlocode_csv, "r", encoding="utf-8", errors="ignore") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                if r.get("Country") == "IN" and r.get("Coordinates"):
-                    input_unlocode_count += 1
-                    coords = parse_unlocode_coords(r["Coordinates"])
-                    if coords:
-                        lat, lon = coords
-                        # Strict boundary check (MultiPolygon + Holes)
-                        if boundary_val.is_inside(lat, lon):
-                            subdiv = r.get("Subdivision", "")
-                            state_name = IN_SUBDIVISIONS.get(subdiv, f"State-{subdiv}" if subdiv else "India")
-                            name = r.get("NameWoDiacritics") or r.get("Name", "Unknown")
-                            loc_id = r["Location"]
-                            settle_id = f"UNLOC:IN:{loc_id}"
+        if unlocode_csv:
+            with open(unlocode_csv, "r", encoding="utf-8", errors="ignore") as f:
+                reader = csv.DictReader(f)
+                for r in reader:
+                    if r.get("Country") == "IN" and r.get("Coordinates"):
+                        input_unlocode_count += 1
+                        coords = parse_unlocode_coords(r["Coordinates"])
+                        if coords:
+                            lat, lon = coords
+                            # Strict boundary check (MultiPolygon + Holes)
+                            if boundary_val.is_inside(lat, lon):
+                                subdiv = r.get("Subdivision", "")
+                                state_name = IN_SUBDIVISIONS.get(subdiv, f"State-{subdiv}" if subdiv else "India")
+                                name = r.get("NameWoDiacritics") or r.get("Name", "Unknown")
+                                loc_id = r["Location"]
+                                settle_id = f"UNLOC:IN:{loc_id}"
 
-                            s = RealSettlement(
-                                settlement_id=settle_id,
-                                name=name,
-                                state=state_name,
-                                district=None,
-                                settlement_type="town",
-                                latitude=lat,
-                                longitude=lon,
-                                source_name="UNECE UN/LOCODE 2026-1",
-                                source_url="https://unece.org/trade/cefact/unlocode",
-                                source_record_id=loc_id,
-                                extract_date=date(2026, 1, 1),
-                            )
-                            temp_store.insert_settlement(s)
-                            imported_unlocode_count += 1
-                        else:
-                            rejected_unlocode_boundary_count += 1
+                                s = RealSettlement(
+                                    settlement_id=settle_id,
+                                    name=name,
+                                    state=state_name,
+                                    district=None,
+                                    settlement_type="town",
+                                    latitude=lat,
+                                    longitude=lon,
+                                    source_name="UNECE UN/LOCODE 2026-1",
+                                    source_url="https://unece.org/trade/cefact/unlocode",
+                                    source_record_id=loc_id,
+                                    extract_date=date(2026, 1, 1),
+                                )
+                                temp_store.insert_settlement(s)
+                                imported_unlocode_count += 1
+                            else:
+                                rejected_unlocode_boundary_count += 1
 
         # 2. Add Curated Multi-State Settlements (Disambiguation and known districts)
         curated_settlements_count = len(CURATED_SETTLEMENTS)
@@ -772,6 +1123,13 @@ def run_streaming_import(
                     else:
                         rejected_unesco_boundary_count += 1
 
+        # 5. Optional OSM PBF / XML streaming ingestion
+        osm_stats = {}
+        if osm_pbf and osm_pbf.exists():
+            osm_extract_dt = date.fromisoformat(source_extract_date) if source_extract_date else import_dt
+            osm_importer = OsmStreamingImporter(temp_store, boundary_val, import_dt, extract_dt=osm_extract_dt)
+            osm_stats = osm_importer.run_import(osm_pbf)
+
         # Reconcile published metadata from ACTUAL SQLite row counts
         with temp_store._get_connection() as conn:
             actual_settlements = conn.execute("SELECT count(*) FROM settlements").fetchone()[0]
@@ -780,10 +1138,25 @@ def run_streaming_import(
             if not integrity or integrity[0][0] != "ok":
                 raise RuntimeError(f"Integrity check failed on staging database: {integrity}")
 
-        # 5. Record Import Metadata in Database
-        temp_store.set_metadata("coverage_level", "Partial Coverage")
-        temp_store.set_metadata("covered_regions", "Karnataka, Gujarat, Rajasthan, Bihar, Madhya Pradesh, Tamil Nadu, Odisha, Goa, Himachal Pradesh, Delhi, Maharashtra, UP, and UNECE UN/LOCODE Indian points")
+        # 6. Record Import Metadata in Database
+        # Truthful coverage level: Only an import covering full nationwide India extract qualifies for Complete Extract.
+        # A test fixture, regional zone, or partial subset MUST remain Partial Coverage.
+        is_full_india = False
+        if osm_pbf and osm_pbf.exists():
+            fname = osm_pbf.name.lower()
+            if "india-latest" in fname and osm_pbf.stat().st_size > 1_000_000_000:
+                is_full_india = True
+
+        cov_level = "Complete Extract" if is_full_india else "Partial Coverage"
+        cov_note = "Full India OSM Extract" if is_full_india else (
+            f"Regional / Partial Extract ({osm_pbf.name})" if (osm_pbf and osm_pbf.exists()) else "Multi-State Subsets"
+        )
+
+        temp_store.set_metadata("coverage_level", cov_level)
+        temp_store.set_metadata("coverage_note", cov_note)
+        temp_store.set_metadata("covered_regions", "Karnataka, Gujarat, Rajasthan, Bihar, Madhya Pradesh, Tamil Nadu, Odisha, Goa, Himachal Pradesh, Assam, Meghalaya, Sikkim, Manipur, Tripura, Nagaland, Arunachal Pradesh, Mizoram, Delhi, Maharashtra, UP, and UNECE UN/LOCODE Indian points")
         temp_store.set_metadata("snapshot_date", snapshot_date)
+        temp_store.set_metadata("source_extract_date", source_extract_date or snapshot_date)
         temp_store.set_metadata("settlements_count", str(actual_settlements))
         temp_store.set_metadata("places_count", str(actual_places))
         temp_store.set_metadata("input_unlocode_count", str(input_unlocode_count))
@@ -795,6 +1168,12 @@ def run_streaming_import(
         temp_store.set_metadata("unlocode_sha256", unlocode_sha)
         temp_store.set_metadata("boundary_sha256", boundary_sha)
         temp_store.set_metadata("unesco_sha256", unesco_sha)
+        temp_store.set_metadata("osm_pbf_sha256", osm_pbf_sha)
+        temp_store.set_metadata("osm_stats_json", json.dumps(osm_stats, default=str))
+
+        # Checkpoint WAL logs to ensure everything is flushed to the main db file before copying
+        with temp_store._get_connection() as tmp_c:
+            tmp_c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
         # Atomic copy and replace with backup/rollback on Windows
         backup_db_path = None
@@ -803,6 +1182,8 @@ def run_streaming_import(
                 backup_db_path = output_db.with_suffix(".db.bak")
                 shutil.copy2(str(output_db), str(backup_db_path))
             shutil.copy2(str(temp_db_path), str(output_db))
+            with RealCatalogStore(output_db)._get_connection() as out_c:
+                out_c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             if backup_db_path and backup_db_path.exists():
                 backup_db_path.unlink()
         except Exception as e:
@@ -825,6 +1206,7 @@ def run_streaming_import(
             "unlocode_sha256": unlocode_sha,
             "boundary_sha256": boundary_sha,
             "unesco_sha256": unesco_sha,
+            "osm_stats": osm_stats,
         }
 
     finally:
@@ -841,12 +1223,15 @@ def main() -> None:
     parser.add_argument("--unesco", type=str, default="data/wikidata_unesco_india.json", help="Path to UNESCO JSON")
     parser.add_argument("--boundary", type=str, default="data/india_boundary.geojson", help="Path to boundary GeoJSON")
     parser.add_argument("--output", type=str, default="data/real_catalog.db", help="Target SQLite DB")
-    parser.add_argument("--version", type=str, default="2026-11-09", help="Snapshot date")
+    parser.add_argument("--osm-pbf", type=str, default=None, help="Optional Path to OpenStreetMap PBF/XML extract")
+    parser.add_argument("--version", type=str, default="2026-11-10", help="Import snapshot date")
+    parser.add_argument("--extract-date", type=str, default=None, help="Source publication/export date (defaults to import date)")
     args = parser.parse_args()
 
-    unlocode_p = Path(args.unlocode).resolve()
+    unlocode_p = Path(args.unlocode).resolve() if args.unlocode else None
     unesco_p = Path(args.unesco).resolve() if args.unesco else None
     boundary_p = Path(args.boundary).resolve() if args.boundary else None
+    osm_p = Path(args.osm_pbf).resolve() if args.osm_pbf else None
     out_p = Path(args.output).resolve()
 
     print(f"Starting streaming import -> {out_p}")
@@ -855,7 +1240,9 @@ def main() -> None:
         unesco_json=unesco_p,
         boundary_geojson=boundary_p,
         output_db=out_p,
-        snapshot_date=args.version
+        snapshot_date=args.version,
+        osm_pbf=osm_p,
+        source_extract_date=args.extract_date,
     )
     print("Import success:", res)
 

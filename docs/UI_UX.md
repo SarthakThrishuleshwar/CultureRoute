@@ -1,7 +1,7 @@
 # CultureRoute UI/UX specification
 
-**Status:** Design specification; [landing-page prototype](../site/dist/index.html) is static  
-**Visual reference:** supplied 28.8-second Acme template recording  
+**Status:** Design specification with [current Streamlit behavior](PHASE8_REPAIR.md). Real plans display uncertainty, known fee subtotal, and explicit route failure; the landing-page prototype remains static.
+**Visual reference:** supplied 28.8-second Acme template recording
 **Product reference:** `CultureRoute_DEV_AAT_Project_Specification.pdf` pp. 1–5, 7–8
 
 ## 1. Design approach and reference adaptation
@@ -83,7 +83,7 @@ Each screen has a title, one-sentence purpose, current source snapshot/cutoff wh
 
 Show **Fastest plan** and **Most cultural stops** with consistent red/blue labels, the same frozen input snapshot, aligned maps and timetables, and rows for cultural stops, elapsed time, entry + between-stop cost, estimated between-stop carbon, and coverage warnings. Highlight a difference only when one exists. [Spec pp. 3, 5]
 
-**Desktop wireframe:** two equal plan columns with synchronized stop detail and a compact comparison strip. **Mobile:** labeled plan switcher, pinned comparison metrics, accessible view of each full timetable. **States:** objectives return the same route; one/both infeasible; changed constraint awaiting rerun; unknown hours. The example Jaipur numbers may be shown as a **specification baseline** until generated live.
+**Desktop wireframe:** two equal plan columns with synchronized stop detail and a compact comparison strip. **Mobile:** labeled plan switcher, pinned comparison metrics, accessible view of each full timetable. **States:** objectives return the same route; one/both infeasible; changed constraint awaiting rerun; unknown hours. The synthetic Jaipur baseline is generated live; real-place results are classified separately.
 
 ### 4.5 Insights and Predictions — FR-08, FR-09, FR-13
 

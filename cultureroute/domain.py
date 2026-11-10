@@ -121,7 +121,7 @@ class RealSettlement(BaseModel):
     state: str = Field(description="Indian State or Union Territory")
     district: Optional[str] = Field(default=None, description="Administrative district; None if unrecorded by source")
     sub_district: Optional[str] = Field(default=None, description="Tehsil / Taluk / Block; None if unrecorded")
-    settlement_type: Literal["city", "town", "village", "locality", "unknown"] = "unknown"
+    settlement_type: Literal["city", "town", "village", "hamlet", "suburb", "locality", "rural_locality", "unknown"] = "unknown"
     latitude: float = Field(ge=5.0, le=38.0, description="WGS-84 latitude bounded to India")
     longitude: float = Field(ge=67.0, le=98.0, description="WGS-84 longitude bounded to India")
     source_name: str = Field(description="Source registry or extract name")
@@ -135,8 +135,8 @@ class RealSettlement(BaseModel):
         for prefix in SYNTHETIC_PREFIXES:
             if v.startswith(prefix):
                 raise ValueError(f"Synthetic prefix '{prefix}' prohibited in real settlement ID: '{v}'")
-        if not re.match(r"^[A-Z0-9_\-]+:[A-Za-z0-9_\-\.:]+$", v):
-            raise ValueError(f"Settlement ID must be namespace-prefixed (e.g. 'SETTLE:IN:123'), got: '{v}'")
+        if not re.match(r"^[A-Z0-9_\-]+:[A-Za-z0-9_\-\.:/]+$", v):
+            raise ValueError(f"Settlement ID must be namespace-prefixed (e.g. 'SETTLE:IN:123', 'OSM:node/123'), got: '{v}'")
         return v
 
 
@@ -160,7 +160,7 @@ class RealPlaceRecord(BaseModel):
     state: str = Field(description="Indian State or Union Territory")
     district: Optional[str] = Field(default=None, description="Administrative district; None if unverified by source")
     sub_district: Optional[str] = Field(default=None, description="Tehsil / Taluk / Block; None if unverified")
-    settlement_type: Literal["city", "town", "village", "rural_locality", "unknown"] = "unknown"
+    settlement_type: Literal["city", "town", "village", "hamlet", "suburb", "locality", "rural_locality", "unknown"] = "unknown"
     cultural_category: CulturalCategory
     subcategory: Optional[str] = Field(default=None, description="Specific tag, e.g. 'fort', 'stepwell', 'museum'")
     raw_tags: Dict[str, str] = Field(default_factory=dict, description="Preserved upstream source tags")

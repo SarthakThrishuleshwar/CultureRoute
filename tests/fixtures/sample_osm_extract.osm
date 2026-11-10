@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SYNTHETIC / FICTIONAL PARSER TEST FIXTURE ONLY
+  This file is an artificial XML fixture with invented OSM IDs created strictly for unit testing
+  the OsmStreamingImporter node, way, and relation callbacks and boundary filtering logic.
+  It is NOT an actual upstream OpenStreetMap extract, must not be used as real traveler data,
+  and must not be represented as a real-source demonstration.
+-->
+<osm version="0.6" generator="CultureRoute Synthetic Test Fixture">
+  <!-- Synthetic Settlement Node: Test Town (Karnataka) -->
+  <node id="9990000001" lat="12.4237" lon="76.6947" version="1">
+    <tag k="name" v="Synthetic Test Town"/>
+    <tag k="name:en" v="Synthetic Test Town"/>
+    <tag k="name:kn" v="ಟೆಸ್ಟ್ ಪಟ್ಟಣ"/>
+    <tag k="place" v="town"/>
+    <tag k="is_in:state" v="Karnataka"/>
+    <tag k="is_in:district" v="Mandya"/>
+  </node>
+
+  <!-- Synthetic Cultural Node: Test Summer Palace -->
+  <node id="9990000002" lat="12.4189" lon="76.7025" version="1">
+    <tag k="name" v="Synthetic Test Palace"/>
+    <tag k="historic" v="palace"/>
+    <tag k="heritage" v="yes"/>
+    <tag k="addr:state" v="Karnataka"/>
+    <tag k="addr:district" v="Mandya"/>
+  </node>
+
+  <!-- Synthetic Cultural Node: Test Temple -->
+  <node id="9990000003" lat="12.4251" lon="76.6853" version="1">
+    <tag k="name" v="Synthetic Test Temple"/>
+    <tag k="amenity" v="place_of_worship"/>
+    <tag k="religion" v="hindu"/>
+    <tag k="historic" v="temple"/>
+    <tag k="addr:state" v="Karnataka"/>
+    <tag k="addr:district" v="Mandya"/>
+  </node>
+
+  <!-- Nodes for Way Testing (Polygon Fort Wall) -->
+  <node id="9990000010" lat="12.4200" lon="76.6900" version="1"/>
+  <node id="9990000011" lat="12.4210" lon="76.6900" version="1"/>
+  <node id="9990000012" lat="12.4210" lon="76.6910" version="1"/>
+  <node id="9990000013" lat="12.4200" lon="76.6910" version="1"/>
+
+  <!-- Synthetic Cultural Way: Test Historic Fort (Polygon with centroid at ~12.4205, 76.6905) -->
+  <way id="9990000101" version="1">
+    <nd ref="9990000010"/>
+    <nd ref="9990000011"/>
+    <nd ref="9990000012"/>
+    <nd ref="9990000013"/>
+    <nd ref="9990000010"/>
+    <tag k="name" v="Synthetic Test Fort Wall"/>
+    <tag k="historic" v="fort"/>
+    <tag k="addr:state" v="Karnataka"/>
+  </way>
+
+  <!-- Synthetic Cultural Relation: Test Heritage Complex (Resolves centroid from way 9990000101) -->
+  <relation id="9990000201" version="1">
+    <member type="way" ref="9990000101" role="outer"/>
+    <tag k="name" v="Synthetic Test Heritage Complex"/>
+    <tag k="historic" v="heritage"/>
+    <tag k="addr:state" v="Karnataka"/>
+  </relation>
+
+  <!-- Excluded Non-Cultural Amenity: Generic Fast Food (Must be filtered out) -->
+  <node id="9990000004" lat="12.4230" lon="76.6940" version="1">
+    <tag k="name" v="Synthetic Fast Food"/>
+    <tag k="amenity" v="fast_food"/>
+  </node>
+
+  <!-- Extraterritorial Settlement: Outside India Boundary (Must be rejected) -->
+  <node id="9990000005" lat="31.5204" lon="74.3587" version="1">
+    <tag k="name" v="Synthetic Foreign City"/>
+    <tag k="place" v="city"/>
+  </node>
+</osm>

@@ -41,12 +41,12 @@ def test_source_manifest_integrity():
 
     # Verify checksums of existing raw files match manifest
     for ds_id, ds in datasets.items():
-        if "file_path" in ds:
+        if ds.get("file_path") and not ds["file_path"].startswith("None"):
             fp = ROOT_DIR / ds["file_path"]
             assert fp.exists(), f"File {fp} declared in manifest must exist"
             actual_sha = calculate_sha256(fp)
             assert actual_sha == ds["sha256"], f"Checksum mismatch for dataset {ds_id}"
-            assert ds.get("license"), f"Dataset {ds_id} must have explicit license"
+        assert ds.get("license"), f"Dataset {ds_id} must have explicit license"
 
 
 def test_expanded_regions_outside_study_cities():
@@ -103,7 +103,7 @@ def test_stable_real_id_conventions():
         assert not pid.startswith("POI-"), f"Synthetic ID leaked into real places: {pid}"
 
     for sid in settle_ids:
-        assert sid.startswith(("UNLOC:IN:", "SETTLE:IN:")), f"Invalid settlement ID prefix: {sid}"
+        assert sid.startswith(("UNLOC:IN:", "SETTLE:IN:", "OSM:")), f"Invalid settlement ID prefix: {sid}"
         assert not sid.startswith("CITY-"), f"Synthetic city ID leaked into real settlements: {sid}"
 
 

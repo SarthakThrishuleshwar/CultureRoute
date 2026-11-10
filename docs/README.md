@@ -18,7 +18,7 @@ This folder contains the **actual proposed documentation set** for CultureRoute,
 | [Phasewise prompts](phasewise_prompts.md) | Reusable prompts to regenerate or expand documents phase by phase. | Supplementary authoring aid. |
 | [Visual reference map](uiux_design_reference.md) | Short template-to-CultureRoute mapping and tokens. | Companion to UI/UX specification. |
 
-The [static landing-page prototype](../site/dist/index.html) illustrates the visual language. It does **not** implement the planner, DEV Lab, database pipeline, or six connected application screens.
+The [static landing-page prototype](../site/dist/index.html) illustrates the visual language. The connected local Streamlit application is separate; see the [Phase 8 repair and runbook](PHASE8_REPAIR.md) for what it implements.
 
 ## Verified source baseline
 
@@ -59,10 +59,31 @@ Phase 3 audited and corrected Phase 2 catalog claims, established a streaming, r
    - Out-of-coverage searches honestly report "Not Indexed" instead of implying zero attractions exist.
    - Proximity search is strictly labeled as straight-line distance, not travel time or road route.
 
-5. **Pending for Phase 4**:
-   - Directed travel times and road network distances.
-   - Multi-day itinerary generation and optimization.
-   - Ticketing and booking integration.
-   - DEV Lab analytics, forecasting, and live venue verification.
+5. **Field-Level Evidence Architecture & Venue Verification Pilot (Phase 7)**:
+   - **Append-Only Evidence Repository**: Implemented `VenueEvidenceStore` backed by `data/venue_evidence.db`, completely separate from the generated catalog (`data/real_catalog.db`). Rebuilding the catalog from fresh extracts never overwrites or purges evidence history. Duplicate evidence IDs are rejected with explicit integrity violations.
+   - **Catalog Orphan Detection**: `find_orphaned_records` detects any evidence records whose source IDs no longer match places in the active catalog, reporting them rather than silently reassigning them.
+   - **Date Separation**: Strict separation of source extract date, import date, and field-checked date.
+   - **Five Field States**: Each venue field (`opening_hours`, `entry_fee`, `step_free_access`, `operating_status`, `typical_duration`) is independently evaluated into `VERIFIED`, `PROVISIONAL`, `STALE`, `CONFLICTING`, or `UNKNOWN`.
+   - **Visitor-Specific Safety**: Fees and access rules are isolated by visitor profile (`INDIAN_ADULT`, `FOREIGN_ADULT`, `CHILD`). The resolver never cross-substitutes another group's fee when the requested group is unverified.
+   - **Explicit Free Admission & Day Closures**: Free admission resolves to ₹0.00 only when explicitly supported by source evidence. Weekly closures (e.g. Taj Mahal Friday closure) dynamically yield closed statuses.
+   - **Verified Pilot Venues**: Grounded in official ASI notices across separated Indian zones:
+     - North: Taj Mahal, Agra, UP (`WD:Q9141`)
+     - North: Qutb Minar, Delhi (`WD:Q187635`)
+     - South: Brihadisvara Temple, Thanjavur, TN (`WD:Q839211`)
+     - South: Badami Cave Temples, Bagalkot, KA (`WD:Q825236`)
+     - West: Rani ki Vav, Patan, GJ (`WD:Q7293002`)
+     - North-East / Non-Metro: Rang Ghar, Sivasagar, AS (`OSM:way/458786992`)
+     - North-East / Discovery-Only: Kamakhya Devi Temple, Guwahati (`OSM:way/225927819`)
+
+6. **Conditional real-place planning (Phase 8 repair)**:
+   - See [the repair and runbook](PHASE8_REPAIR.md) for the implemented contract. The real planner uses separate catalog, evidence, and route databases. A routing backend must be configured explicitly; no public server is the default.
+   - A→B and B→A are cached independently only after response validation. Legacy cache rows, including manually entered two-point lines, are quarantined. Walking is disabled until a separate pedestrian graph is verified.
+   - The real tab supports selected source IDs or settlement proximity, date, traveler group, time window, dwell assumption, step-free filter, and optional return. Unknown hours, fees, fares, and accessibility remain visible. A real plan with unknown venue facts is not labeled verified.
+
+7. **System Limitations & Operational Boundaries**:
+   - **Routing**: Provider selection and production infrastructure remain pending. The public OSRM demonstration endpoint was used only for a limited local test when configured explicitly.
+   - **Venue evidence**: 35 former pilot records were retracted from active resolution after source re-audit. Four Taj Mahal records cite a directly inspected official ticketing page; exact hours, Aihole July closure, and Pattadakal step-free access remain unverified.
+   - **AI/ML Standby Constraint**: The ML footfall prediction engine remains strictly on standby (inference/training paused) in accordance with project governance.
+   - **No Unauthorized Deployment**: The application is configured and verified for local execution only; public publishing or cloud deployment has not been performed.
 
 

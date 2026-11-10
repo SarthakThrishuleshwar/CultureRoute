@@ -1,7 +1,7 @@
 # CultureRoute database and data preparation
 
-**Status:** Source schema and counts verified; prepared views are design definitions, not materialized tables  
-**References:** `CultureRoute_DEV_AAT_Project_Specification.pdf` pp. 2, 4–8; `SmartTrip/data/PS-01.db`; `WanderMatch/data/PS-11.db`; [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md)  
+**Status:** Synthetic source schema/counts verified; [separate real catalog, evidence, and route stores](PHASE8_REPAIR.md) are implemented. The original prepared-view descriptions remain design definitions where so marked.
+**References:** `CultureRoute_DEV_AAT_Project_Specification.pdf` pp. 2, 4–8; `SmartTrip/data/PS-01.db`; `WanderMatch/data/PS-11.db`; [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md)
 **Reproduce counts:** `python docs/audit_sources.py` from the workspace root
 
 ## 1. Source inventory and scope

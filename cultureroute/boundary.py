@@ -57,6 +57,9 @@ class IndiaBoundaryValidator:
         self.geojson_path = Path(geojson_path) if geojson_path else None
         self._polygons: List[Tuple[List[List[float]], List[List[List[float]]]]] = []
         self._bbox: Optional[Tuple[float, float, float, float]] = None
+        self._lat_bins: List[List[Tuple[float, float, float, float, float, float, float, int, bool]]] = [
+            [] for _ in range(400)
+        ]
         self._load_geojson(self.geojson_path)
 
     def _load_geojson(self, path: Optional[Path]) -> None:
@@ -95,9 +98,42 @@ class IndiaBoundaryValidator:
                 min_lat = min(pt[1] for ext, _ in self._polygons for pt in ext)
                 max_lat = max(pt[1] for ext, _ in self._polygons for pt in ext)
                 self._bbox = (min_lat, max_lat, min_lon, max_lon)
+
+                # Precompute indexed y-interval bins for ray casting
+                self._build_edge_index()
         except Exception:
             self._polygons = []
             self._bbox = None
+            self._lat_bins = [[] for _ in range(400)]
+
+    def _build_edge_index(self) -> None:
+        self._lat_bins = [[] for _ in range(400)]
+        for p_idx, (p_ext, p_holes) in enumerate(self._polygons):
+            # Index exterior ring edges
+            n = len(p_ext)
+            for i in range(n):
+                p1x, p1y = p_ext[i]
+                p2x, p2y = p_ext[(i + 1) % n]
+                min_y, max_y = min(p1y, p2y), max(p1y, p2y)
+                edge = (p1x, p1y, p2x, p2y, min_y, max_y, max(p1x, p2x), p_idx, False)
+                b_start = max(0, int(min_y * 10))
+                b_end = min(399, int(max_y * 10))
+                for b in range(b_start, b_end + 1):
+                    self._lat_bins[b].append(edge)
+
+            # Index hole edges
+            for h_idx, hole in enumerate(p_holes):
+                hn = len(hole)
+                for i in range(hn):
+                    p1x, p1y = hole[i]
+                    p2x, p2y = hole[(i + 1) % hn]
+                    min_y, max_y = min(p1y, p2y), max(p1y, p2y)
+                    # Use negative ID or marker for hole
+                    edge = (p1x, p1y, p2x, p2y, min_y, max_y, max(p1x, p2x), (p_idx * 1000) + h_idx, True)
+                    b_start = max(0, int(min_y * 10))
+                    b_end = min(399, int(max_y * 10))
+                    for b in range(b_start, b_end + 1):
+                        self._lat_bins[b].append(edge)
 
     @property
     def is_available(self) -> bool:
@@ -113,9 +149,35 @@ class IndiaBoundaryValidator:
         if not (min_lat <= lat <= max_lat and min_lon <= lon <= max_lon):
             return False
 
-        for ext_ring, holes in self._polygons:
-            if point_in_polygon(lon, lat, ext_ring):
-                in_hole = any(point_in_polygon(lon, lat, hole) for hole in holes)
-                if not in_hole:
+        bin_idx = int(lat * 10)
+        if bin_idx < 0 or bin_idx >= 400:
+            return False
+
+        candidate_edges = self._lat_bins[bin_idx]
+        if not candidate_edges:
+            return False
+
+        poly_inside: Dict[int, bool] = {}
+        hole_inside: Dict[int, bool] = {}
+
+        for p1x, p1y, p2x, p2y, min_y, max_y, max_x, ident, is_hole in candidate_edges:
+            if min_y < lat <= max_y:
+                if lon <= max_x:
+                    if p1x == p2x or lon <= ((lat - p1y) * (p2x - p1x) / (p2y - p1y) + p1x):
+                        if is_hole:
+                            hole_inside[ident] = not hole_inside.get(ident, False)
+                        else:
+                            poly_inside[ident] = not poly_inside.get(ident, False)
+
+        for p_idx, is_in in poly_inside.items():
+            if is_in:
+                # Check if point falls within any holes belonging to this polygon
+                in_any_hole = False
+                for h_key, h_in in hole_inside.items():
+                    if h_in and (h_key // 1000) == p_idx:
+                        in_any_hole = True
+                        break
+                if not in_any_hole:
                     return True
+
         return False

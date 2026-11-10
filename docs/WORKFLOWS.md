@@ -1,6 +1,6 @@
 # CultureRoute end-to-end workflows
 
-**Status:** Proposed workflows; the landing-page prototype is static  
+**Status:** Proposed workflows plus [implemented local traveler flow](PHASE8_REPAIR.md). Missing venue evidence yields a qualified plan; missing route yields a failure.
 **References:** `CultureRoute_DEV_AAT_Project_Specification.pdf` pp. 3–5, 8; [`PRD.md`](PRD.md), [`TRD.md`](TRD.md), [`DATABASE.md`](DATABASE.md)
 
 ## 1. Shared workflow rules
@@ -110,3 +110,26 @@ The project specification suggests this demo sequence: generate two Jaipur plans
 | Forecast | 57 complete weeks, 12 past-only predictions, MAE 3.42/3.88, dates. |
 
 None of these checkpoints should be marked “passed” until the connected application is implemented and run. The source audit currently verifies the data and forecast arithmetic; it does not implement the website or planner.
+
+## 7. Real-place traveler: discover, route, plan, verify (Phase 8)
+
+```mermaid
+flowchart LR
+  A[Select Real Settlement or Hub] --> B[Filter or Choose Real Cultural Places]
+  B --> C[Configure Visit Date, Mode, Visitor Profile, Dwell]
+  C --> D{Query Directed Routing Engine}
+  D -- Network Error / Exceeds Mode --> E[Show Honest Provider Error or Unreachable Status]
+  D -- Genuine Routed Leg --> F[Evaluate Field Evidence Store]
+  F --> G{Resolve Evidence Status}
+  G -- Missing Fee/Hours --> H[Label PROVISIONAL Plan with Missing Assumptions]
+  G -- All Fields Verified --> I[Label VERIFIED Plan with Official Citations]
+  H --> J[Render Turn-by-Turn Road Geometry and Schedule]
+  I --> J
+```
+
+| Step | Actor and trigger | UI state and backend action | Output / exception |
+| --- | --- | --- | --- |
+| R1 Select | Traveler selects settlement, hub, or custom IDs. | Query `places` and `settlements` in `real_catalog.db`. Show genuine coordinates, cultural categories, and field evidence status. | Strict namespace validation: `poi_` and `cty_` synthetic IDs rejected with explicit `ValueError`. |
+| R2 Route | Backend evaluates travel legs. | Query persistent `real_route_legs` cache or genuine directed OSRM provider. Walking > 25 km explicitly pruned. | Genuine road geometry extracted. Fabricated straight-line multipliers and coordinate biases strictly forbidden. |
+| R3 Evidence | Backend checks admission and hours. | `VenueEvidenceStore` evaluates date and visitor profile (`INDIAN_ADULT`, `FOREIGN_ADULT`, `CHILD`). | Unknown admission is never treated as ₹0; missing fields labeled as traveler/system assumptions. |
+| R4 Plan | Planner generates ordered day itinerary. | Evaluates dual objectives (Fastest / Most Cultural) with timetable, wait times, visit duration, and optional return leg. | Classifies result as `VERIFIED` (all primary evidence present) or `PROVISIONAL` (missing assumptions). Infeasibility explicitly explained. |

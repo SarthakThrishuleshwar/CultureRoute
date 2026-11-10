@@ -1,8 +1,8 @@
 # CultureRoute product requirements document
 
-**Status:** Proposed product specification, not an implementation report  
-**Version:** 1.0 · 8 November 2026  
-**Primary reference:** `CultureRoute_DEV_AAT_Project_Specification.pdf`, pages 1–8  
+**Status:** Product specification; for implemented scope and limits see [Phase 8 repair](PHASE8_REPAIR.md). Real-place planning is conditional, and AI/ML is on standby.
+**Version:** 1.0 · 8 November 2026
+**Primary reference:** `CultureRoute_DEV_AAT_Project_Specification.pdf`, pages 1–8
 **Data references:** `SmartTrip (1).zip` and `WanderMatch.zip`, SQLite databases and `01_YOUR_DATA_MODEL.md` files
 
 ## 1. Product summary
@@ -37,7 +37,7 @@ Live booking, real-time travel or price feeds, proof of physical visits, measure
 
 ### Delivery boundary
 
-The six screens below describe the proposed application. The current [`site/dist/index.html`](../site/dist/index.html) is a **static landing-page visual concept** with no connected planner, database, or DEV Lab. This PRD must not be read as proof that any requirement has already shipped.
+The screens below originate in the proposed specification. The separate [`site/dist/index.html`](../site/dist/index.html) remains a static landing-page concept. The connected local Streamlit application now runs from `app.py`; its actual scope and remaining limits are recorded in [Phase 8 repair](PHASE8_REPAIR.md).
 
 ## 4. Information architecture
 
@@ -72,10 +72,13 @@ Priority **P0** is required for a credible end-to-end demo; **P1** completes the
 | FR-12 | P1 | DEV Lab SQL Mode accepts bounded **read-only** queries against allowed views, blocks mutations and unsupported statements, and reports time/output limits and errors without modifying source files. |
 | FR-13 | P1 | Missing-footfall exercise compares observed-only, median replacement, and fitted-distribution estimates while preserving source nulls; estimates and holdout errors are labeled. |
 | FR-14 | P1 | Supported result tables export as CSV or Parquet with column names, filters, cutoff, and method metadata where the format permits. A failed export yields an explicit error. |
+| FR-15 | P0 | Nationwide Real-Place Day Planner generates ordered multi-stop day plans using exclusively real catalog venues (`WD:...`, `OSM:...`) and genuine directed routing. Synthetic IDs are strictly rejected. |
+| FR-16 | P0 | Genuine Directed Routing engine computes and caches asymmetric road and pedestrian legs with verified timestamps and source attribution. Fabricated multipliers or coordinate biases are strictly prohibited. Walking > 25 km is rejected as `UNREACHABLE_BY_MODE`. |
 
 ### Example acceptance narratives
 
-- **Traveler:** On a Saturday in Jaipur, starting 09:00 with six hours, INR 1,000, and three distinct stops, the implementation should reproduce the specification's two route baselines: 3h27 / INR 585.46 / 1 cultural stop / 1.806 kg, and 3h47 / INR 638.30 / 2 cultural stops / 2.840 kg. These are specification fixtures, not a current runtime result. [Spec p. 5]
+- **Traveler (Synthetic):** On a Saturday in Jaipur, starting 09:00 with six hours, INR 1,000, and three distinct stops, the implementation reproduces the specification's two route baselines: 3h27 / INR 585.46 / 1 cultural stop / 1.806 kg, and 3h47 / INR 638.30 / 2 cultural stops / 2.840 kg.
+- **Traveler (Real Places):** In Badami and Aihole, planning a driving itinerary visits Badami Cave Temples (`WD:Q825236`), Pattadakal Group of Monuments (`WD:Q817250`), and Durga Temple Aihole (`WD:Q3517553`) over 70.15 km of genuine directed road network with turn-by-turn geometry. During July monsoon closure, Aihole is excluded deterministically.
 - **Evaluator:** A distinct-POI saved-versus-planned join returns 363 saved IDs, 655 planned IDs, 352 matches, 11 saved only, 303 planned only, and 666 full-outer IDs. This is reproduced by the source audit. [Spec p. 5]
 - **Forecast:** The last-week and trailing-four-week baselines over the last 12 of 57 complete weeks show MAE 3.42 and 3.88 interactions respectively. This is reproduced by the source audit. [Spec p. 8]
 
@@ -90,6 +93,7 @@ Priority **P0** is required for a credible end-to-end demo; **P1** completes the
 | NFR-05 | Reproducibility | Repeated calculation from the same source version and filters returns the same values; forecast training never sees the target week. |
 | NFR-06 | Safety of evaluator tools | SQL is restricted to allowed read-only operations, bounded in time and output rows, and cannot alter source databases. |
 | NFR-07 | Performance | Set and measure realistic route/query/render budgets after implementation; the source does not provide numeric service-level targets. |
+| NFR-08 | Truthful Evidence | Unknown venue fields (hours, admission fees, operating status, accessibility) are never defaulted to ₹0 or fabricated. Result levels are classified as VERIFIED, PROVISIONAL, or DISCOVERY-ONLY. |
 
 ## 7. Measurement definitions
 

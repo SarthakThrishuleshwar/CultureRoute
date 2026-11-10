@@ -60,10 +60,16 @@ from cultureroute.domain import (
 from cultureroute.planner import (
     parse_time_to_minutes,
     plan_synthetic_day,
-    plan_real_pilot_day,
+    plan_real_place_day,
     DayPlan,
 )
-from cultureroute.routing import TransportMode, RouteLegStore, compute_directed_leg
+from cultureroute.routing import (
+    TransportMode,
+    RouteLegStore,
+    compute_directed_leg,
+    DEFAULT_ROUTES_DB,
+    configured_backend,
+)
 from cultureroute.catalog import RealCatalogStore
 from cultureroute.boundary import IndiaBoundaryValidator, is_coordinate_in_india_bbox
 from cultureroute.evidence import VenueEvidenceStore, FieldEvidenceStatus
@@ -90,6 +96,15 @@ from cultureroute.dev_lab import (
 BOUNDARY_GEOJSON = Path(__file__).resolve().parent / "data" / "india_boundary.geojson"
 boundary_validator = IndiaBoundaryValidator(BOUNDARY_GEOJSON) if BOUNDARY_GEOJSON.exists() else None
 REAL_CATALOG_DB = Path(__file__).resolve().parent / "data" / "real_catalog.db"
+VENUE_EVIDENCE_DB = Path(__file__).resolve().parent / "data" / "venue_evidence.db"
+
+# Ensure pilot evidence is seeded if evidence DB does not exist
+if not VENUE_EVIDENCE_DB.exists():
+    try:
+        from cultureroute.pilot_evidence import seed_pilot_evidence
+        seed_pilot_evidence(VENUE_EVIDENCE_DB)
+    except Exception:
+        pass
 
 # Ensure canonical study database is built
 if not DEFAULT_STUDY_DB.exists():
@@ -97,6 +112,99 @@ if not DEFAULT_STUDY_DB.exists():
         build_study_database(DEFAULT_STUDY_DB)
     except Exception:
         pass
+
+
+def render_plan_spatial_map(plan: DayPlan, plan_label: str, line_color: str = "#365376"):
+    """Render a spatial schematic sequence map for a day plan using exact stop coordinates.
+    Distinctly labeled as a schematic sequence, not a routed road path."""
+    if not plan or not plan.stops:
+        return
+    lats = [s.latitude for s in plan.stops]
+    lngs = [s.longitude for s in plan.stops]
+    stop_names = [f"{s.stop_index}. {s.name}" for s in plan.stops]
+    fee_texts = []
+    for s in plan.stops:
+        fee_str = f"INR {s.entry_fee:.2f}" if s.entry_fee is not None else "Unknown"
+        fee_texts.append(
+            f"<b>Stop {s.stop_index}: {s.name}</b><br>"
+            f"Category: {s.category} ({'Cultural' if s.is_cultural else 'Non-cultural'})<br>"
+            f"Arrival: {s.arrival_time} | Depart: {s.visit_end_time}<br>"
+            f"Fee: {fee_str} | Status: {s.hours_status}"
+        )
+    hover_texts = fee_texts
+
+    fig = go.Figure()
+
+    # If routed polylines are available, render them as solid lines
+    if getattr(plan, "route_geometry_available", False) and plan.legs:
+        for idx, leg in enumerate(plan.legs):
+            if leg.polyline_points and len(leg.polyline_points) >= 2:
+                r_lats = [pt[0] for pt in leg.polyline_points]
+                r_lngs = [pt[1] for pt in leg.polyline_points]
+                fig.add_trace(go.Scatter(
+                    x=r_lngs,
+                    y=r_lats,
+                    mode="lines",
+                    line=dict(width=3, color=line_color),
+                    name=f"Leg {leg.leg_index}: {leg.origin_name} → {leg.destination_name}",
+                    hoverinfo="name"
+                ))
+    else:
+        # Schematic sequence dashed line connecting stops in visit order
+        fig.add_trace(go.Scatter(
+            x=lngs,
+            y=lats,
+            mode="lines",
+            line=dict(width=2.5, color=line_color, dash="dot"),
+            hoverinfo="none",
+            name=f"{plan_label} Sequence"
+        ))
+
+    # Add stop markers
+    fig.add_trace(go.Scatter(
+        x=lngs,
+        y=lats,
+        mode="markers+text",
+        marker=dict(size=14, color=line_color, line=dict(width=2, color="#ffffff")),
+        text=[f"  {s.stop_index}" for s in plan.stops],
+        textposition="top right",
+        textfont=dict(size=11, color="#292925", family="Georgia"),
+        hovertext=hover_texts,
+        hoverinfo="text",
+        name="Stops"
+    ))
+
+    pad_lat = max(0.005, (max(lats) - min(lats)) * 0.2)
+    pad_lng = max(0.005, (max(lngs) - min(lngs)) * 0.2)
+
+    routed_geometry = bool(getattr(plan, "route_geometry_available", False) and plan.legs)
+    fig.update_layout(
+        height=260,
+        margin=dict(l=45, r=20, t=30, b=40),
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#f7f3e9",
+        xaxis=dict(
+            title="Longitude (°E)",
+            range=[min(lngs) - pad_lng, max(lngs) + pad_lng],
+            showgrid=True,
+            gridcolor="#e0dad0",
+            zeroline=False
+        ),
+        yaxis=dict(
+            title="Latitude (°N)",
+            range=[min(lats) - pad_lat, max(lats) + pad_lat],
+            showgrid=True,
+            gridcolor="#e0dad0",
+            zeroline=False
+        ),
+        title=dict(
+            text=(f"Provider route geometry · {plan_label}" if routed_geometry else
+                  f"Schematic stop sequence · {plan_label} (not a routed road path)"),
+            font=dict(size=11, color="#5c5852")
+        ),
+        showlegend=False
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 # Page Configuration
 FAVICON_PNG = Path(__file__).resolve().parent / "site" / "dist" / "assets" / "favicon.png"
@@ -347,8 +455,8 @@ elif view_mode == "Discover":
     )
 
     tab_synthetic_discover, tab_legacy_discover = st.tabs([
-        "Study Cities Explorer (45 Cities / 675 Attractions)",
-        "Optional Legacy Real-Place Catalog"
+        "Synthetic Research Study (45 Cities / 675 Attractions)",
+        "Real-Place Discovery (India Extract Catalog)"
     ])
 
     with tab_synthetic_discover:
@@ -403,18 +511,18 @@ elif view_mode == "Discover":
                 city_subset = cities
 
             subset_names = [c["name"] for c in city_subset]
-            
+
             # Guard against invalid previous city selection when state changes
             cur_city_choice = st.session_state.get("discover_city_select", def_city)
             if cur_city_choice not in subset_names:
                 cur_city_choice = subset_names[0]
                 st.session_state["discover_city_select"] = cur_city_choice
-                
+
             city_idx = subset_names.index(cur_city_choice) if cur_city_choice in subset_names else 0
 
             with st_c2:
                 selected_city_name = st.selectbox("Select Study City", subset_names, index=city_idx, key="discover_city_select")
-            
+
             matching_cities = [c for c in city_subset if c["name"] == selected_city_name]
             selected_city = matching_cities[0] if matching_cities else (city_subset[0] if city_subset else cities[0])
 
@@ -800,151 +908,450 @@ elif view_mode == "Discover":
                 ''', unsafe_allow_html=True)
     with tab_legacy_discover:
         st.markdown("""
-        <div style="background: #ffffff; border: 1.5px solid #b6afa3; border-left: 4px solid #365376; padding: 16px 20px; margin-bottom: 18px;">
+        <div style="background: #ffffff; border: 1.5px solid #b6afa3; border-left: 4px solid #982b32; padding: 16px 20px; margin-bottom: 18px;">
             <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
                 <div style="font-family: Georgia, serif; font-size: 1.15rem; font-weight: bold; color: #292925;">
-                    Archived Legacy Real-Place Catalog (OSM &amp; Wikidata Pilot Extracts)
+                    Real-Place Discovery &middot; India Extract Catalog
                 </div>
-                <span style="font-size: 0.72rem; font-weight: bold; color: #365376; border: 1px solid #365376; padding: 2px 6px;">
-                    RETIRED REFERENCE ARCHIVE
+                <span style="font-size: 0.72rem; font-weight: bold; color: #982b32; border: 1px solid #982b32; padding: 2px 6px;">
+                    SIX-ZONE EXTRACT &middot; FIELD DETAILS VARY
                 </span>
             </div>
             <div style="font-size: 0.84rem; color: #5c5852; margin-top: 6px; line-height: 1.6;">
-                The primary CultureRoute application runs exclusively on the verified <strong>SmartTrip</strong> (PS-01.db) and <strong>WanderMatch</strong> (PS-11.db) datasets.
-                This screen provides historical inspection of the early Phase 3 real-place pilot extracts from OpenStreetMap and Wikidata, retained for provenance and syllabus audit purposes.
+                Explore real Indian settlements and cultural heritage sites imported from licensed open datasets
+                (UNECE UN/LOCODE, Wikidata UNESCO Indian sites, and verified heritage monuments).
+                <br><strong>Note on Separation:</strong> This explorer operates on real geospatial points across India and is completely separated
+                from the 45-city synthetic research study. Proximity is measured as <em>straight-line distance (haversine)</em>, never road distance or travel time.
+                Hours, admission fees, and accessibility are preserved as <code>UNKNOWN</code> unless verified by official primary notices.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         if not REAL_CATALOG_DB.exists():
-            st.warning("Legacy database (data/real_catalog.db) is not present. Core study workflows remain fully operational.")
+            st.warning("Real catalog database (data/real_catalog.db) is not present. Run `python -m cultureroute.ingest` to build the real-place index.")
         else:
-            with sqlite3.connect(REAL_CATALOG_DB) as legacy_conn:
-                places_df = pd.read_sql_query(
-                    "SELECT name, state, district, cultural_category, latitude, longitude, upstream_type FROM places ORDER BY name ASC",
-                    legacy_conn
-                )
-                settlements_count = legacy_conn.execute("SELECT count(*) FROM settlements").fetchone()[0]
-                evidence_count = legacy_conn.execute("SELECT count(*) FROM venue_evidence").fetchone()[0]
+            cat_store = RealCatalogStore(REAL_CATALOG_DB)
+            meta = cat_store.get_all_metadata()
+            counts = cat_store.get_counts()
+            snap_date = meta.get("snapshot_date", "2026-11-10")
+            source_ext_date = meta.get("source_extract_date", snap_date)
+            extract_dates = sorted({r["extract_date"] for r in cat_store.get_extract_registry()
+                                    if r["status"] == "COMPLETED" and r.get("extract_date")})
+            if extract_dates:
+                source_ext_date = extract_dates[0] if len(extract_dates) == 1 else f"{extract_dates[0]}–{extract_dates[-1]}"
+            cov_level = meta.get("coverage_level", "Partial Coverage")
+            cov_note = meta.get("coverage_note", "Multi-State Subsets")
 
-            leg_m1, leg_m2, leg_m3, leg_m4 = st.columns(4)
-            leg_m1.metric("Covered States / UTs", f"{len(places_df['state'].unique())}", "Regional scope")
-            leg_m2.metric("Archived Venues", f"{len(places_df)}", "OSM/Wikidata places")
-            leg_m3.metric("Settlement Boundaries", f"{settlements_count:,}", "Settlement records")
-            leg_m4.metric("Audited Venue Evidence", f"{evidence_count}", "Reference evidence")
+            # Coverage & Status Metrics derived from validated index metadata
+            m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+            m_c1.metric("Indexed Settlements", f"{counts['settlements']:,}", "UN/LOCODE, OSM & Curated")
+            m_c2.metric("Indexed Cultural Places", f"{counts['places']:,}", "UNESCO, ASI & OSM")
+            m_c3.metric("Coverage Scope", cov_level, cov_note)
+            m_c4.metric("Source Snapshot Date", source_ext_date, f"Imported: {snap_date}")
+
+            # Expandable Zone Registry & Geographic Breadth Inspector
+            extract_reg = cat_store.get_extract_registry()
+            if extract_reg:
+                with st.expander(f"Official Zone Extracts Registry ({len(extract_reg)} zones registered) & Coverage Audit"):
+                    st.caption("Derived directly from catalog extract_registry table. Each zone is processed independently with stable upstream IDs and atomic staging verification.")
+                    z_rows = []
+                    for r in extract_reg:
+                        z_rows.append({
+                            "Zone Name": r["zone_name"],
+                            "Extract File": r["filename"],
+                            "Status": r["status"],
+                            "Source Extract Date": r["extract_date"],
+                            "Imported On": r["import_date"],
+                            "Settlements": f"{r['rows_settlements']:,}",
+                            "Cultural Places": f"{r['rows_places']:,}",
+                            "Upstream Checksum": r["sha256"][:12] + "..." if r.get("sha256") else "N/A"
+                        })
+                    st.dataframe(pd.DataFrame(z_rows), use_container_width=True, hide_index=True)
+                    st.markdown(f"**Indexed Coverage Regions:** {meta.get('covered_regions', 'N/A')}")
+                    if meta.get("pending_regions") and meta.get("pending_regions") != "None (All 6 Zones Indexed)":
+                        st.markdown(f"**Pending Regions:** :orange[{meta.get('pending_regions')}]")
+                    else:
+                        st.markdown("**Pending Regions:** :green[None — Complete 6-Zone Nationwide Extract Active]")
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Filter controls for legacy catalog
-            lf_col1, lf_col2, lf_col3 = st.columns([1.5, 1.5, 2.0])
-            with lf_col1:
-                leg_states = ["All Covered States"] + sorted(list(places_df["state"].dropna().unique()))
-                sel_leg_state = st.selectbox("Filter by Legacy State", leg_states, key="leg_state_select")
-            with lf_col2:
-                leg_cats = ["All Categories"] + sorted(list(places_df["cultural_category"].dropna().unique()))
-                sel_leg_cat = st.selectbox("Filter by Cultural Category", leg_cats, key="leg_cat_select")
-            with lf_col3:
-                leg_search = st.text_input("Search Venue Name", placeholder="e.g. Temple, Fort, Stepwell", key="leg_venue_search").strip().lower()
+            # Two search pathways: Settlement Search vs Direct Coordinates / State Exploration
+            real_search_mode = st.pills(
+                "Search Mode",
+                ["Search by Settlement Name", "Explore by State / Region", "Coordinate Proximity Search"],
+                default="Search by Settlement Name",
+                key="real_discovery_search_mode",
+                label_visibility="collapsed"
+            ) or "Search by Settlement Name"
 
-            # Filter logic
-            filtered_leg = places_df.copy()
-            if sel_leg_state != "All Covered States":
-                filtered_leg = filtered_leg[filtered_leg["state"] == sel_leg_state]
-            if sel_leg_cat != "All Categories":
-                filtered_leg = filtered_leg[filtered_leg["cultural_category"] == sel_leg_cat]
-            if leg_search:
-                filtered_leg = filtered_leg[filtered_leg["name"].str.lower().str.contains(leg_search, na=False)]
+            if real_search_mode == "Search by Settlement Name":
+                st.markdown("**Search Indian Settlements (Cities, Towns, Villages, Hamlets, Rural Localities):**")
+                s_col1, s_col2 = st.columns([3, 1])
+                with s_col1:
+                    settle_query = st.text_input(
+                        "Settlement Name",
+                        value="Guwahati",
+                        placeholder="e.g. Guwahati, Badami, Khajuraho, Konark, Sohra, Tezpur, Udaipur, Anegundi",
+                        key="real_settle_search_input",
+                        label_visibility="collapsed"
+                    ).strip()
+                with s_col2:
+                    search_radius = st.slider("Search Radius (km Proximity)", min_value=5, max_value=50, value=25, step=5, key="real_radius_slider")
 
-            st.markdown(f"**Archived Real-Place Catalog Table ({len(filtered_leg)} of {len(places_df)} records):**")
-            st.dataframe(
-                filtered_leg.rename(columns={
-                    "name": "Attraction Name",
-                    "state": "State",
-                    "district": "District",
-                    "cultural_category": "Cultural Category",
-                    "latitude": "Latitude",
-                    "longitude": "Longitude",
-                    "upstream_type": "Upstream Source"
-                }),
-                hide_index=True,
-                use_container_width=True
-            )
-
-            # Spatial distribution presentation of legacy places
-            if len(filtered_leg) > 0:
-                st.subheader("Archived Venue Geographic Distribution")
-                leg_mode = st.pills(
-                    "Presentation Mode",
-                    ["Category Breakdown (Bar Chart)", "Interactive Map", "Raw Coordinate Scatter"],
-                    default="Category Breakdown (Bar Chart)",
-                    key="legacy_discover_mode_pills",
-                    label_visibility="collapsed"
-                ) or "Category Breakdown (Bar Chart)"
-
-                if leg_mode == "Category Breakdown (Bar Chart)":
-                    cat_summary = filtered_leg["cultural_category"].value_counts().reset_index()
-                    cat_summary.columns = ["cultural_category", "venue_count"]
-                    fig_leg_bar = px.bar(
-                        cat_summary,
-                        x="venue_count",
-                        y="cultural_category",
-                        orientation="h",
-                        text="venue_count",
-                        color="cultural_category",
-                        color_discrete_sequence=["#982b32", "#365376", "#733339", "#4f637b", "#8b7e66"],
-                        labels={"cultural_category": "Category", "venue_count": "Venue Count"},
-                        title=f"Archived Pilot Venues by Category ({len(filtered_leg)} total)"
-                    )
-                    fig_leg_bar.update_traces(textposition="outside")
-                    fig_leg_bar.update_layout(
-                        height=340,
-                        paper_bgcolor="#f7f3e9",
-                        plot_bgcolor="#ffffff",
-                        showlegend=False,
-                        margin=dict(l=20, r=30, t=35, b=20)
-                    )
-                    st.plotly_chart(fig_leg_bar, use_container_width=True)
-                elif leg_mode == "Interactive Map":
-                    try:
-                        fig_leg_map = px.scatter_map(
-                            filtered_leg,
-                            lat="latitude",
-                            lon="longitude",
-                            color="cultural_category",
-                            hover_name="name",
-                            hover_data=["state", "district"],
-                            title=f"Archived Pilot Venues ({len(filtered_leg)} points)",
-                            zoom=4,
-                            map_style="open-street-map",
-                            color_discrete_sequence=["#982b32", "#365376", "#733339", "#4f637b", "#8b7e66"]
-                        )
-                        fig_leg_map.update_layout(height=380, paper_bgcolor="#f7f3e9", margin=dict(l=0, r=0, t=35, b=0))
-                        st.plotly_chart(fig_leg_map, use_container_width=True)
-                    except Exception:
-                        pass
+                if not settle_query:
+                    st.info("Enter a settlement name above to search the indexed real-place catalog.")
                 else:
-                    fig_leg_scatter = px.scatter(
-                        filtered_leg,
-                        x="longitude",
-                        y="latitude",
-                        color="cultural_category",
-                        hover_name="name",
-                        hover_data=["state", "district"],
-                        title=f"Archived Pilot Venues Spatial Distribution ({len(filtered_leg)} points)",
-                        color_discrete_sequence=["#982b32", "#365376", "#733339", "#4f637b", "#8b7e66"]
-                    )
-                    fig_leg_scatter.update_layout(
-                        height=380,
-                        paper_bgcolor="#f7f3e9",
-                        plot_bgcolor="#ffffff",
-                        margin=dict(l=20, r=20, t=35, b=20)
-                    )
-                    st.plotly_chart(fig_leg_scatter, use_container_width=True)
+                    matching_settlements = cat_store.search_settlements(settle_query)
+                    if not matching_settlements:
+                        st.warning(f"'{settle_query}' not found in this index. [State: Unindexed in Current Extract]")
+                        st.caption("Note on Search: A failed search indicates the locality is unindexed in the current source extract, not proof that the place does not exist. The current catalog indexes UN/LOCODE points, historical gazetteers, and real OpenStreetMap zone extracts.")
+                    else:
+                        st.success(f"Found {len(matching_settlements)} matching settlement record(s).")
 
-            st.info(
-                "Notice: To plan deterministic itineraries, compare cultural trade-offs, or evaluate predictive models, "
-                "switch to Tab 1 ('Study Cities Explorer (45 Cities / 675 Attractions)') above."
+                        # Disambiguation selector if multiple settlements match
+                        if len(matching_settlements) > 1:
+                            st.markdown(f"**Disambiguation:** Multiple settlements matched '{settle_query}'. Select the target location:")
+                            settle_options = {
+                                f"{s.name} ({s.state}{f' &middot; {s.district}' if s.district else ''} &middot; {s.settlement_type.title()}) [ID: {s.settlement_id}]": s
+                                for s in matching_settlements
+                            }
+                            selected_label = st.selectbox("Disambiguate Settlement", list(settle_options.keys()), key="disambig_settle_select")
+                            target_settle = settle_options[selected_label]
+                        else:
+                            target_settle = matching_settlements[0]
+
+                        # Display target settlement card
+                        st.markdown(f"""
+                        <div style="background: #ffffff; border: 1.5px solid #b6afa3; padding: 12px 16px; margin: 10px 0 16px 0;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <div>
+                                    <span style="font-size: 1.05rem; font-weight: bold; color: #292925;">{target_settle.name}</span>
+                                    <span style="font-size: 0.82rem; color: #5c5852; margin-left: 8px;">State: <strong>{target_settle.state}</strong>{f' | District: <strong>{target_settle.district}</strong>' if target_settle.district else ''} | Type: <strong>{target_settle.settlement_type.title()}</strong></span>
+                                </div>
+                                <span style="font-size: 0.75rem; background: #f0ebe1; padding: 2px 8px; border: 1px solid #dcd4c8;">Lat: {target_settle.latitude:.4f}, Lon: {target_settle.longitude:.4f}</span>
+                            </div>
+                            <div style="font-size: 0.78rem; color: #8b7e66; margin-top: 4px;">
+                                Upstream Source: {target_settle.source_name} &middot; Record ID: <code>{target_settle.source_record_id}</code> &middot; Extract Date: {target_settle.extract_date.isoformat()}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        # Category filter for nearby attractions
+                        cat_filter_opt = st.selectbox(
+                            "Filter Attractions by Category",
+                            ["All Cultural Categories", "Heritage", "Museum", "Religious", "Food"],
+                            key="real_cat_filter_nearby"
+                        )
+                        selected_cat = None
+                        if cat_filter_opt == "Heritage":
+                            selected_cat = CulturalCategory.HERITAGE
+                        elif cat_filter_opt == "Museum":
+                            selected_cat = CulturalCategory.MUSEUM
+                        elif cat_filter_opt == "Religious":
+                            selected_cat = CulturalCategory.RELIGIOUS
+                        elif cat_filter_opt == "Food":
+                            selected_cat = CulturalCategory.FOOD
+
+                        # Proximity search
+                        nearby_results = cat_store.search_nearby_places(
+                            lat=target_settle.latitude,
+                            lon=target_settle.longitude,
+                            radius_km=float(search_radius),
+                            category=selected_cat
+                        )
+
+                        if not nearby_results:
+                            st.info(f"Honest Empty Result: No matching mapped cultural attractions found within {search_radius} km straight-line proximity of {target_settle.name} in this index. (Note: this reflects mapped records in the current extract, not proof that no cultural venues exist nearby).")
+                        else:
+                            st.markdown(f"**Cultural Attractions within {search_radius} km of {target_settle.name} ({len(nearby_results)} found):**")
+                            st.caption("Straight-line proximity is indicated. Hours, entry fees, and step-free accessibility are preserved as UNKNOWN unless primary evidence exists.")
+
+                            # Build results table
+                            res_rows = []
+                            for p, dist in nearby_results:
+                                res_rows.append({
+                                    "Place Name": p.name,
+                                    "Straight-Line Proximity": f"{dist:.2f} km",
+                                    "Category": p.cultural_category.value.title(),
+                                    "Subcategory": (p.subcategory or "").replace("_", " ").title(),
+                                    "State": p.state,
+                                    "Source ID": p.source_id,
+                                    "Opening Hours": p.opening_hours.status.value,
+                                    "Entry Fee": p.entry_fee.status.value,
+                                    "Accessibility": p.accessibility.status.value,
+                                    "Source URL": p.source_url
+                                })
+                            res_df = pd.DataFrame(res_rows)
+                            st.dataframe(res_df, use_container_width=True, hide_index=True)
+
+                            # Paired spatial orientation map
+                            st.markdown("**Spatial Orientation Map (Schematic Proximity Points):**")
+                            map_df = pd.DataFrame([
+                                {
+                                    "name": p.name,
+                                    "lat": p.latitude,
+                                    "lon": p.longitude,
+                                    "dist_label": f"{dist:.2f} km",
+                                    "cat": p.cultural_category.value.title()
+                                }
+                                for p, dist in nearby_results
+                            ])
+                            # Add target settlement point
+                            map_df = pd.concat([
+                                pd.DataFrame([{
+                                    "name": f"Settlement: {target_settle.name}",
+                                    "lat": target_settle.latitude,
+                                    "lon": target_settle.longitude,
+                                    "dist_label": "0.00 km (Center)",
+                                    "cat": "Settlement Center"
+                                }]),
+                                map_df
+                            ], ignore_index=True)
+
+                            fig_spatial = px.scatter(
+                                map_df,
+                                x="lon",
+                                y="lat",
+                                text="name",
+                                color="cat",
+                                hover_data=["dist_label", "cat"],
+                                labels={"lon": "Longitude (°E)", "lat": "Latitude (°N)", "cat": "Category"},
+                                title=f"Geographic Proximity from {target_settle.name} (Radius: {search_radius} km)",
+                                color_discrete_map={
+                                    "Settlement Center": "#292925",
+                                    "Heritage": "#982b32",
+                                    "Museum": "#365376",
+                                    "Religious": "#b79d5b",
+                                    "Food": "#7d6f58"
+                                }
+                            )
+                            fig_spatial.update_traces(textposition="top center", marker=dict(size=12))
+                            fig_spatial.update_layout(
+                                height=420,
+                                paper_bgcolor="#f7f3e9",
+                                plot_bgcolor="#ffffff",
+                                margin=dict(l=20, r=20, t=40, b=20)
+                            )
+                            st.plotly_chart(fig_spatial, use_container_width=True)
+                            st.caption("Schematic Proximity Points: Straight-line haversine coordinates. Does not represent routed road geometry.")
+
+            elif real_search_mode == "Explore by State / Region":
+                st.markdown("**Browse Real Cultural Places by Covered State / Union Territory:**")
+                all_states = cat_store.get_all_states()
+                selected_state = st.selectbox("Select State / Region", all_states, key="real_state_browse_select")
+
+                state_places = cat_store.get_places_by_state(selected_state)
+                st.markdown(f"**Indexed Venues in {selected_state} ({len(state_places)} venues):**")
+
+                if not state_places:
+                    st.info(f"No mapped cultural attractions indexed for {selected_state} in this extract. This does not establish that none exist.")
+                else:
+                    sp_rows = []
+                    for p in state_places:
+                        sp_rows.append({
+                            "Place Name": p.name,
+                            "Category": p.cultural_category.value.title(),
+                            "Subcategory": (p.subcategory or "").replace("_", " ").title(),
+                            "Latitude": p.latitude,
+                            "Longitude": p.longitude,
+                            "Source ID": p.source_id,
+                            "Hours": p.opening_hours.status.value,
+                            "Admission": p.entry_fee.status.value,
+                            "Accessibility": p.accessibility.status.value,
+                            "Source URL": p.source_url
+                        })
+                    st.dataframe(pd.DataFrame(sp_rows), use_container_width=True, hide_index=True)
+
+            else: # Coordinate Proximity Search
+                st.markdown("**Direct Coordinate Proximity Search (GPS Latitude & Longitude):**")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    in_lat = st.number_input("Latitude (°N)", value=15.9189, format="%.4f", key="real_coord_lat")
+                with c2:
+                    in_lon = st.number_input("Longitude (°E)", value=75.6842, format="%.4f", key="real_coord_lon")
+                with c3:
+                    in_rad = st.number_input("Radius (km)", value=25.0, min_value=1.0, max_value=100.0, step=5.0, key="real_coord_rad")
+
+                coord_results = cat_store.search_nearby_places(lat=in_lat, lon=in_lon, radius_km=in_rad)
+                if not coord_results:
+                    st.info(f"Honest Empty Result: No indexed cultural venues found within {in_rad:.1f} km of ({in_lat:.4f}, {in_lon:.4f}).")
+                else:
+                    st.markdown(f"**Found {len(coord_results)} places within {in_rad:.1f} km:**")
+                    c_rows = []
+                    for p, dist in coord_results:
+                        c_rows.append({
+                            "Place Name": p.name,
+                            "Proximity": f"{dist:.2f} km",
+                            "Category": p.cultural_category.value.title(),
+                            "Source ID": p.source_id,
+                            "State": p.state,
+                            "Source URL": p.source_url
+                        })
+                    st.dataframe(pd.DataFrame(c_rows), use_container_width=True, hide_index=True)
+
+            # Phase 7: Place-Detail View and Venue Evidence Inspector
+            st.markdown("---")
+            st.markdown("### 🏛️ Place Field Evidence Inspector")
+            st.caption(
+                "Inspect field-level evidence for real catalog places. "
+                "Fields without direct primary source evidence remain strictly UNKNOWN. "
+                "Note: A verified pilot venue does NOT imply nationwide verification of all 62,203 catalog places."
             )
+
+            ev_col1, ev_col2, ev_col3 = st.columns([2, 1, 1])
+            with ev_col1:
+                # Provide quick access to verified pilot places or custom search
+                pilot_places_lookup = {
+                    "WD:Q9141 (Taj Mahal, Agra, Uttar Pradesh)": "WD:Q9141",
+                    "WD:Q187635 (Qutb Minar, Delhi)": "WD:Q187635",
+                    "WD:Q839211 (Brihadisvara Temple, Thanjavur, Tamil Nadu)": "WD:Q839211",
+                    "WD:Q825236 (Badami Cave Temples, Bagalkot, Karnataka)": "WD:Q825236",
+                    "WD:Q7293002 (Rani ki Vav, Patan, Gujarat)": "WD:Q7293002",
+                    "OSM:way/458786992 (Rang Ghar, Sivasagar, Assam)": "OSM:way/458786992",
+                    "OSM:way/225927819 (Kamakhya Devi Temple, Guwahati - Discovery-Only)": "OSM:way/225927819",
+                }
+                selected_pilot_key = st.selectbox(
+                    "Select Place to Inspect",
+                    list(pilot_places_lookup.keys()) + ["Custom Source ID..."],
+                    key="evidence_inspector_place_select"
+                )
+                if selected_pilot_key == "Custom Source ID...":
+                    chosen_source_id = st.text_input("Enter Real Place Source ID (e.g. WD:Q9141 or OSM:way/...)", value="WD:Q9141", key="evidence_custom_sid").strip()
+                else:
+                    chosen_source_id = pilot_places_lookup[selected_pilot_key]
+
+            with ev_col2:
+                req_visit_date = st.date_input("Visit Date", value=date(2026, 11, 10), key="evidence_visit_date")
+            with ev_col3:
+                req_visitor_profile = st.selectbox(
+                    "Visitor Group",
+                    ["INDIAN_ADULT", "FOREIGN_ADULT", "CHILD"],
+                    index=0,
+                    key="evidence_visitor_profile"
+                )
+
+            # Resolve place and evidence
+            target_place = cat_store.get_place_by_id(chosen_source_id)
+            ev_store = VenueEvidenceStore(VENUE_EVIDENCE_DB)
+
+            if not target_place:
+                st.warning(f"Source ID '{chosen_source_id}' not found in the published catalog.")
+            else:
+                # Place Header Card
+                st.markdown(f"""
+                <div style="background: #ffffff; border: 1.5px solid #292925; padding: 14px 18px; margin: 12px 0 16px 0; border-radius: 4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span style="font-size: 1.25rem; font-weight: bold; color: #292925;">{target_place.name}</span>
+                            <span style="font-size: 0.85rem; color: #5c5852; margin-left: 10px;">
+                                Category: <strong>{target_place.cultural_category.value.title()}</strong>
+                                ({target_place.subcategory or 'General'}) &middot;
+                                State: <strong>{target_place.state}</strong>
+                                {f' &middot; District: <strong>{target_place.district}</strong>' if target_place.district else ''}
+                            </span>
+                        </div>
+                        <span style="font-size: 0.78rem; background: #e8f0fe; color: #1a73e8; padding: 4px 10px; border-radius: 3px; font-weight: 500;">
+                            Source ID: <code>{target_place.source_id}</code>
+                        </span>
+                    </div>
+                    <div style="font-size: 0.80rem; color: #5c5852; margin-top: 8px;">
+                        Upstream Record: <strong>{target_place.upstream_type}</strong> (<code>{target_place.upstream_id}</code>) &middot;
+                        Coordinates: {target_place.latitude:.4f}°N, {target_place.longitude:.4f}°E &middot;
+                        Extract Date: <code>{target_place.source_extract_date.isoformat()}</code> &middot;
+                        Catalog Import: <code>{target_place.import_date.isoformat()}</code>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Resolve all 5 target fields
+                inspect_fields = [
+                    ("Opening Hours", "opening_hours"),
+                    ("Entry Fee / Admission", "entry_fee"),
+                    ("Step-Free Accessibility", "step_free_access"),
+                    ("Operating Status", "operating_status"),
+                    ("Typical Visit Duration", "typical_duration")
+                ]
+
+                field_display_cards = []
+                for label, f_key in inspect_fields:
+                    res = ev_store.resolve_field(
+                        source_id=chosen_source_id,
+                        field_name=f_key,
+                        visit_date=req_visit_date,
+                        visitor_profile=req_visitor_profile,
+                        clock_date=date(2026, 11, 10)
+                    )
+
+                    status_val = res.status.value
+                    if status_val == "KNOWN":
+                        status_val = "VERIFIED"
+
+                    # Status badge styling
+                    if status_val == "VERIFIED":
+                        badge_color = "#0f5132"
+                        badge_bg = "#d1e7dd"
+                    elif status_val == "PROVISIONAL":
+                        badge_color = "#055160"
+                        badge_bg = "#cff4fc"
+                    elif status_val == "STALE":
+                        badge_color = "#664d03"
+                        badge_bg = "#fff3cd"
+                    elif status_val == "CONFLICTING":
+                        badge_color = "#842029"
+                        badge_bg = "#f8d7da"
+                    else: # UNKNOWN
+                        badge_color = "#41464b"
+                        badge_bg = "#e2e3e5"
+
+                    source_link_html = f'<a href="{res.source_url}" target="_blank" style="color:#0d6efd; text-decoration:none;">{res.source_citation}</a>' if res.source_url else (res.source_citation or "No primary source")
+                    chk_date_str = res.checked_date.isoformat() if res.checked_date else "Not checked"
+
+                    field_display_cards.append({
+                        "Field": label,
+                        "Status": f'<span style="background:{badge_bg}; color:{badge_color}; padding:2px 8px; border-radius:3px; font-weight:bold; font-size:0.75rem;">{status_val}</span>',
+                        "Resolved Detail": res.display_text,
+                        "Applicable Visitor Scope": res.visitor_scope,
+                        "Checked Date": chk_date_str,
+                        "Source Citation & Authority": source_link_html,
+                    })
+
+                st.markdown(
+                    pd.DataFrame(field_display_cards).to_html(escape=False, index=False),
+                    unsafe_allow_html=True
+                )
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("Audit & Raw Evidence Records for this Place"):
+                    raw_records = ev_store.get_evidence_records(chosen_source_id)
+                    if not raw_records:
+                        st.info("No raw evidence records recorded in venue_evidence.db for this place.")
+                    else:
+                        st.caption(f"Found {len(raw_records)} append-only evidence record(s). Preserved separately from catalog rebuilds.")
+                        raw_table = []
+                        for r in raw_records:
+                            raw_table.append({
+                                "Evidence ID": r.evidence_id,
+                                "Field": r.field_name,
+                                "Source Type": r.source_type.value,
+                                "Checked Date": r.checked_date.isoformat(),
+                                "Visitor Scope": r.visitor_scope,
+                                "Raw Value": r.raw_value,
+                                "Source URL": r.source_url
+                            })
+                        st.dataframe(pd.DataFrame(raw_table), use_container_width=True, hide_index=True)
+
+            # Source Provenance and Attribution Footer
+            st.markdown("---")
+            st.markdown("""
+            <div style="font-size: 0.80rem; color: #5c5852; line-height: 1.6;">
+                <strong>Dataset Provenance &amp; Attribution Obligations:</strong><br>
+                &bull; <strong>Settlements:</strong> UNECE UN/LOCODE (Public Domain, United Nations Economic Commission for Europe) &middot; Location Code Directory for India.<br>
+                &bull; <strong>Cultural Heritage:</strong> Wikidata &amp; UNESCO World Heritage Sites in India (Creative Commons CC0 1.0 Universal Public Domain Dedication).<br>
+                &bull; <strong>Administrative Boundary:</strong> ISO 3166-1 IND MultiPolygon GeoJSON (Open Database License ODbL / OpenStreetMap contributors).<br>
+                &bull; <strong>Integrity &amp; Status:</strong> All source records checksummed with SHA-256. Opening hours, entry fees, and accessibility default to <code>UNKNOWN</code> without primary source verification.
+            </div>
+            """, unsafe_allow_html=True)
+
 
 
 # ==============================================================================
@@ -960,7 +1367,7 @@ elif view_mode == "Planner":
 
     tab_synth_planner, tab_legacy_planner = st.tabs([
         "Synthetic Day Planner (45 Study Cities)",
-        "Optional Legacy Real-Place Planner"
+        "Real-Place Planner (Conditional)"
     ])
 
     with tab_synth_planner:
@@ -994,47 +1401,93 @@ elif view_mode == "Planner":
         with preset_cols[0]:
             if st.button("Load Jaipur Baseline", key="btn_preset_jaipur"):
                 st.session_state["form_p_city"] = "Jaipur"
+                st.session_state["form_p_date"] = date(2026, 8, 29)
                 st.session_state["form_p_start"] = "09:00"
                 st.session_state["form_p_window"] = 6.0
                 st.session_state["form_p_budget"] = 1000.0
                 st.session_state["form_p_stops"] = 3
+                st.session_state["form_p_mode"] = "cab"
+                st.session_state["form_p_step_free"] = False
+                st.session_state["form_p_pref_cats"] = []
                 st.session_state["p_city"] = "Jaipur"
+                st.session_state["p_date"] = date(2026, 8, 29)
                 st.session_state["p_start"] = "09:00"
                 st.session_state["p_window"] = 6.0
                 st.session_state["p_budget"] = 1000.0
                 st.session_state["p_stops"] = 3
+                st.session_state["p_mode"] = "cab"
+                st.session_state["p_step_free"] = False
+                st.session_state["p_pref_cats"] = []
                 st.rerun()
         with preset_cols[1]:
             if st.button("Load Agra Cultural Preset", key="btn_preset_agra"):
                 st.session_state["form_p_city"] = "Agra"
+                st.session_state["form_p_date"] = date(2026, 8, 29)
                 st.session_state["form_p_start"] = "09:00"
                 st.session_state["form_p_window"] = 8.0
                 st.session_state["form_p_budget"] = 2000.0
                 st.session_state["form_p_stops"] = 3
+                st.session_state["form_p_mode"] = "cab"
+                st.session_state["form_p_step_free"] = False
+                st.session_state["form_p_pref_cats"] = ["heritage", "museum"]
                 st.session_state["p_city"] = "Agra"
+                st.session_state["p_date"] = date(2026, 8, 29)
                 st.session_state["p_start"] = "09:00"
                 st.session_state["p_window"] = 8.0
                 st.session_state["p_budget"] = 2000.0
                 st.session_state["p_stops"] = 3
+                st.session_state["p_mode"] = "cab"
+                st.session_state["p_step_free"] = False
+                st.session_state["p_pref_cats"] = ["heritage", "museum"]
                 st.rerun()
 
-        # Input Controls
-        p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns([1.5, 1.2, 1.2, 1.2, 1.0])
+        # Input Controls - Row 1
+        p_col1, p_col2, p_col3, p_col4, p_col5, p_col6 = st.columns([1.4, 1.2, 1.1, 1.0, 1.1, 0.9])
         cur_city = st.session_state.get("p_city", "Jaipur")
         city_idx = c_names.index(cur_city) if cur_city in c_names else 0
 
         with p_col1:
             p_city = st.selectbox("Study City", c_names, index=city_idx, key="form_p_city")
         with p_col2:
-            p_start_str = st.text_input("Start Time (24h HH:MM)", st.session_state.get("p_start", "09:00"), key="form_p_start")
+            p_date_val = st.date_input(
+                "Visit Date (Local TZ)",
+                value=st.session_state.get("p_date", date(2026, 8, 29)),
+                min_value=date(2025, 1, 1),
+                max_value=date(2027, 12, 31),
+                key="form_p_date",
+                help="Date affects day-of-week closure checks according to the study city's local timezone (Asia/Kolkata, UTC+05:30)."
+            )
         with p_col3:
-            p_window = st.number_input("Window (Hours)", min_value=1.0, max_value=12.0, value=st.session_state.get("p_window", 6.0), step=0.5, key="form_p_window")
+            p_start_str = st.text_input("Start Time (24h)", st.session_state.get("p_start", "09:00"), key="form_p_start")
         with p_col4:
-            p_budget = st.number_input("Budget (INR)", min_value=100.0, max_value=5000.0, value=st.session_state.get("p_budget", 1000.0), step=50.0, key="form_p_budget")
+            p_window = st.number_input("Window (h)", min_value=1.0, max_value=12.0, value=st.session_state.get("p_window", 6.0), step=0.5, key="form_p_window")
         with p_col5:
+            p_budget = st.number_input("Budget (INR)", min_value=100.0, max_value=5000.0, value=st.session_state.get("p_budget", 1000.0), step=50.0, key="form_p_budget")
+        with p_col6:
             p_stops = st.number_input("Stops", min_value=2, max_value=4, value=st.session_state.get("p_stops", 3), step=1, key="form_p_stops")
 
+        # Input Controls - Row 2: Explicit Preferences & Constraints
+        pref_r1, pref_r2, pref_r3 = st.columns([1.5, 1.8, 2.7])
+        with pref_r1:
+            mode_opts = ["cab", "walk"]
+            cur_mode = st.session_state.get("p_mode", "cab")
+            mode_idx = mode_opts.index(cur_mode) if cur_mode in mode_opts else 0
+            p_mode = st.selectbox("Transport Mode (Hard Constraint)", mode_opts, index=mode_idx, key="form_p_mode",
+                                  help="Strictly matches directed rows in poi_travel_matrix. Does not infer reverse legs.")
+        with pref_r2:
+            p_step_free = st.checkbox("Step-Free at Stop Only (Hard Constraint)",
+                                      value=st.session_state.get("p_step_free", False),
+                                      key="form_p_step_free",
+                                      help="Requires stop accessibility == 'step_free'. Note: transit transfer accessibility is unrecorded.")
+        with pref_r3:
+            all_cat_options = ["heritage", "museum", "religious", "food", "entertainment", "nature"]
+            cur_pref_cats = st.session_state.get("p_pref_cats", [])
+            p_pref_cats = st.multiselect("Preferred Cultural Categories (Tie-Breaker)", all_cat_options, default=cur_pref_cats, key="form_p_pref_cats",
+                                         help="Used as a deterministic tie-breaker when comparing candidate itineraries of equal duration and stops.")
+
         gen_clicked = st.button("Generate Plans", type="primary", key="btn_gen_plans")
+
+        p_date_iso = p_date_val.isoformat() if isinstance(p_date_val, (date, datetime)) else str(p_date_val)
 
         # Handle plan generation and stable state snapshot
         parsed_start = parse_time_to_minutes(p_start_str)
@@ -1055,39 +1508,71 @@ elif view_mode == "Planner":
             if not should_compute:
                 snap = st.session_state["plan_snapshot"]
                 if (snap.get("city") != p_city or
+                    snap.get("visit_date") != p_date_iso or
                     snap.get("start_time") != p_start_str or
                     snap.get("window_hours") != p_window or
                     snap.get("budget_inr") != p_budget or
-                    snap.get("target_stops") != int(p_stops)):
+                    snap.get("target_stops") != int(p_stops) or
+                    snap.get("transport_mode") != p_mode or
+                    snap.get("step_free_only") != p_step_free or
+                    snap.get("preferred_categories") != p_pref_cats):
                     should_compute = True
 
             if should_compute:
-                plans = plan_synthetic_day(
-                    city_name=p_city,
-                    start_time=p_start_str,
-                    max_duration_hours=p_window,
-                    budget_inr=p_budget,
-                    target_stops=int(p_stops)
-                )
-                is_fixture = (p_city == "Jaipur" and p_start_str == "09:00" and p_window == 6.0 and p_budget == 1000.0 and int(p_stops) == 3)
+                try:
+                    plans = plan_synthetic_day(
+                        city_name=p_city,
+                        visit_date=p_date_iso,
+                        start_time=p_start_str,
+                        max_duration_hours=p_window,
+                        budget_inr=p_budget,
+                        target_stops=int(p_stops),
+                        transport_mode=p_mode,
+                        step_free_only=p_step_free,
+                        preferred_categories=p_pref_cats
+                    )
+                except ValueError as err:
+                    st.error(f"Input validation error: {err}")
+                    plans = {"fastest": None, "most_cultural": None}
+
+                is_fixture = (p_city == "Jaipur" and p_date_iso == "2026-08-29" and p_start_str == "09:00" and
+                              p_window == 6.0 and p_budget == 1000.0 and int(p_stops) == 3 and
+                              p_mode == "cab" and not p_step_free and not p_pref_cats)
                 st.session_state["plan_snapshot"] = {
                     "city": p_city,
+                    "visit_date": p_date_iso,
                     "start_time": p_start_str,
                     "window_hours": p_window,
                     "budget_inr": p_budget,
                     "target_stops": int(p_stops),
+                    "transport_mode": p_mode,
+                    "step_free_only": p_step_free,
+                    "preferred_categories": p_pref_cats,
                     "plans": plans,
                     "is_default_fixture": is_fixture,
                     "stale": False,
                 }
+                # Also synchronize working state
+                st.session_state["p_city"] = p_city
+                st.session_state["p_date"] = p_date_val
+                st.session_state["p_start"] = p_start_str
+                st.session_state["p_window"] = p_window
+                st.session_state["p_budget"] = p_budget
+                st.session_state["p_stops"] = int(p_stops)
+                st.session_state["p_mode"] = p_mode
+                st.session_state["p_step_free"] = p_step_free
+                st.session_state["p_pref_cats"] = p_pref_cats
+
             fastest_plan = st.session_state["plan_snapshot"]["plans"].get("fastest")
             cultural_plan = st.session_state["plan_snapshot"]["plans"].get("most_cultural")
 
         if fastest_plan is None and cultural_plan is None:
+            weekday_name = p_date_val.strftime("%A") if isinstance(p_date_val, (date, datetime)) else "selected date"
             st.warning(
-                f"Infeasible Day Plan: No feasible {p_stops}-stop itinerary found for {p_city} within "
-                f"budget INR {p_budget:,.2f} and duration {p_window} hours. "
-                "Consider increasing budget or time window, or selecting another study city with recorded directed legs."
+                f"Infeasible Day Plan: No feasible {p_stops}-stop itinerary found for {p_city} on {weekday_name} ({p_date_iso}) "
+                f"within budget INR {p_budget:,.2f}, window {p_window} hours, and mode '{p_mode}'. "
+                "Causes can include known day-of-week closures, opening hour conflicts, budget limits, or unrecorded matrix legs. "
+                "Consider increasing budget, adjusting the date or start time, or choosing another study city."
             )
         elif fastest_plan and cultural_plan:
             # Check for identical route
@@ -1099,7 +1584,7 @@ elif view_mode == "Planner":
                 st.info(
                     f"Same-Objective Result: In {p_city}, the identical route achieves both minimum elapsed duration "
                     f"({fastest_plan.elapsed_formatted}) and maximum cultural stops ({fastest_plan.cultural_stops_count} stops) "
-                    "under the active constraints."
+                    "under the active constraints. No false trade-off is presented."
                 )
 
             st.markdown("---")
@@ -1119,14 +1604,22 @@ elif view_mode == "Planner":
                 m_a2.metric("Cultural Stops", f"{fastest_plan.cultural_stops_count} / {fastest_plan.total_stops_count}")
                 m_a3.metric("Total Cost", f"INR {fastest_plan.total_cost_inr:.2f}")
 
+                if fastest_plan.has_uncertain_hours:
+                    st.warning("Notice: Plan contains stops with unrecorded opening/closing hours. Visited conditionally.")
+
                 st.markdown("**Timetable & Leg Itinerary:**")
                 for s in fastest_plan.stops:
                     badge = "[Cultural]" if s.is_cultural else "[Other]"
-                    st.markdown(f"**{s.arrival_time} - {s.visit_end_time}** : **{s.name}** {badge}")
-                    st.caption(f"Visit: {s.duration_minutes} min | Fee: INR {s.entry_fee:.2f} | Access: {s.accessibility}")
+                    cond_note = f" [CONDITIONAL: {s.hours_status}]" if s.hours_status != "EXACT_VERIFIED" else ""
+                    st.markdown(f"**{s.arrival_time} - {s.visit_end_time}** : **{s.name}** {badge}{cond_note}")
+                    st.caption(f"Visit: {s.duration_minutes} min | Fee: INR {s.entry_fee:.2f} | Access: {s.accessibility} | POI ID: `{s.poi_id}`")
                     if s.stop_index <= len(fastest_plan.legs):
                         l = fastest_plan.legs[s.stop_index - 1]
-                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ Transit Leg: {l.travel_minutes} min ({l.distance_km} km via {l.mode}) | Est. Carbon: {l.carbon_kg:.3f} kg")
+                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ Transit Leg (`{l.matrix_id}`): {l.travel_minutes} min ({l.distance_km} km via {l.mode}, INR {l.cost_inr:.2f}) | Est. Carbon: {l.carbon_kg:.3f} kg")
+
+                # Paired Spatial Sequence Map for Plan A
+                st.markdown("**Paired Spatial Sequence View (Plan A):**")
+                render_plan_spatial_map(fastest_plan, "Plan A (Fastest)", line_color="#365376")
 
             with c_plan2:
                 cultural_gain = cultural_plan.cultural_stops_count - fastest_plan.cultural_stops_count
@@ -1145,14 +1638,47 @@ elif view_mode == "Planner":
                 m_b2.metric("Cultural Stops", f"{cultural_plan.cultural_stops_count} / {cultural_plan.total_stops_count}", gain_label)
                 m_b3.metric("Total Cost", f"INR {cultural_plan.total_cost_inr:.2f}")
 
+                if cultural_plan.has_uncertain_hours:
+                    st.warning("Notice: Plan contains stops with unrecorded opening/closing hours. Visited conditionally.")
+
                 st.markdown("**Timetable & Leg Itinerary:**")
                 for s in cultural_plan.stops:
                     badge = "[Cultural]" if s.is_cultural else "[Other]"
-                    st.markdown(f"**{s.arrival_time} - {s.visit_end_time}** : **{s.name}** {badge}")
-                    st.caption(f"Visit: {s.duration_minutes} min | Fee: INR {s.entry_fee:.2f} | Access: {s.accessibility}")
+                    cond_note = f" [CONDITIONAL: {s.hours_status}]" if s.hours_status != "EXACT_VERIFIED" else ""
+                    st.markdown(f"**{s.arrival_time} - {s.visit_end_time}** : **{s.name}** {badge}{cond_note}")
+                    st.caption(f"Visit: {s.duration_minutes} min | Fee: INR {s.entry_fee:.2f} | Access: {s.accessibility} | POI ID: `{s.poi_id}`")
                     if s.stop_index <= len(cultural_plan.legs):
                         l = cultural_plan.legs[s.stop_index - 1]
-                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ Transit Leg: {l.travel_minutes} min ({l.distance_km} km via {l.mode}) | Est. Carbon: {l.carbon_kg:.3f} kg")
+                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ Transit Leg (`{l.matrix_id}`): {l.travel_minutes} min ({l.distance_km} km via {l.mode}, INR {l.cost_inr:.2f}) | Est. Carbon: {l.carbon_kg:.3f} kg")
+
+                # Paired Spatial Sequence Map for Plan B
+                st.markdown("**Paired Spatial Sequence View (Plan B):**")
+                render_plan_spatial_map(cultural_plan, "Plan B (Most Cultural)", line_color="#982b32")
+
+            # Traceability & Calculation Inspector Expander
+            with st.expander("Inspect Plan Calculation Traceability (Source POI & Leg IDs)"):
+                st.markdown("**Traceability Policy**: Between-stop travel time and fees are derived directly from recorded source rows in `activities_poi` and `poi_travel_matrix`. Travel to first stop and return from last stop are excluded as the study traveler's origin and end points are unrecorded.")
+                t_c1, t_c2 = st.columns(2)
+                with t_c1:
+                    st.markdown("**Plan A Calculation Breakdown:**")
+                    st.markdown(f"- Entry fees total: INR {fastest_plan.entry_cost_inr:.2f} (Decimal)")
+                    st.markdown(f"- Directed transit fares total: INR {fastest_plan.travel_cost_inr:.2f} (Decimal)")
+                    st.markdown(f"- Total budget used: INR {fastest_plan.total_cost_inr:.2f}")
+                    st.markdown(f"- Estimated transit carbon: {fastest_plan.estimated_carbon_kg:.3f} kg")
+                    for s in fastest_plan.stops:
+                        st.markdown(f"  * Stop {s.stop_index}: `{s.poi_id}` ({s.name}) - Fee: INR {s.entry_fee:.2f}, Hours: {s.hours_status}, Access: {s.accessibility}")
+                    for l in fastest_plan.legs:
+                        st.markdown(f"  * Leg {l.leg_index}: `{l.matrix_id}` (`{l.origin_id}` &rarr; `{l.destination_id}`) - Mode: {l.mode}, Time: {l.travel_minutes}m, Fare: INR {l.cost_inr:.2f}")
+                with t_c2:
+                    st.markdown("**Plan B Calculation Breakdown:**")
+                    st.markdown(f"- Entry fees total: INR {cultural_plan.entry_cost_inr:.2f} (Decimal)")
+                    st.markdown(f"- Directed transit fares total: INR {cultural_plan.travel_cost_inr:.2f} (Decimal)")
+                    st.markdown(f"- Total budget used: INR {cultural_plan.total_cost_inr:.2f}")
+                    st.markdown(f"- Estimated transit carbon: {cultural_plan.estimated_carbon_kg:.3f} kg")
+                    for s in cultural_plan.stops:
+                        st.markdown(f"  * Stop {s.stop_index}: `{s.poi_id}` ({s.name}) - Fee: INR {s.entry_fee:.2f}, Hours: {s.hours_status}, Access: {s.accessibility}")
+                    for l in cultural_plan.legs:
+                        st.markdown(f"  * Leg {l.leg_index}: `{l.matrix_id}` (`{l.origin_id}` &rarr; `{l.destination_id}`) - Mode: {l.mode}, Time: {l.travel_minutes}m, Fare: INR {l.cost_inr:.2f}")
 
             # Visual Time Allocation Comparison
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1191,51 +1717,205 @@ elif view_mode == "Planner":
 
     with tab_legacy_planner:
         st.markdown("""
-        <div style="background: #ffffff; border: 1.5px solid #b6afa3; border-left: 4px solid #365376; padding: 16px 20px; margin-bottom: 18px;">
-            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
-                <div style="font-family: Georgia, serif; font-size: 1.15rem; font-weight: bold; color: #292925;">
-                    Legacy Real-Place Pilot vs Synthetic Router Architecture
-                </div>
-                <span style="font-size: 0.72rem; font-weight: bold; color: #365376; border: 1px solid #365376; padding: 2px 6px;">
-                    METHODOLOGY COMPARISON
-                </span>
+        <div style="background: #ffffff; border: 1.5px solid #292925; border-left: 4px solid #982b32; padding: 14px 18px; margin-bottom: 16px;">
+            <div style="font-weight: bold; color: #292925; font-size: 1.05rem;">
+                🏛️ Real-Place Planner (Conditional)
             </div>
-            <div style="font-size: 0.84rem; color: #5c5852; margin-top: 6px; line-height: 1.6;">
-                The early Phase 3 pilot attempted real-place routing using ad-hoc OpenStreetMap coordinates.
-                However, external routing APIs introduced non-deterministic latency and network flakiness.
-                CultureRoute was subsequently re-architected around verified, pre-computed directed travel matrices (SmartTrip PS-01).
+            <div style="font-size: 0.84rem; color: #5c5852; margin-top: 4px; line-height: 1.5;">
+                Explore conditional cultural day trips across indexed Indian places. Routing requires an explicitly configured
+                profile-specific provider; unavailable routes are reported rather than estimated. Most venue details remain
+                <strong>UNKNOWN</strong>, so a displayed timetable may be illustrative.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        comp_col1, comp_col2 = st.columns(2)
-        with comp_col1:
-            st.markdown("""
-            <div style="background: #ffffff; border: 1px solid #b6afa3; padding: 14px 18px;">
-                <div style="font-weight: bold; color: #982b32; font-size: 0.95rem;">Active Deterministic Router (Tab 1)</div>
-                <ul style="font-size: 0.82rem; color: #5c5852; line-height: 1.6; margin: 8px 0 0 16px; padding: 0;">
-                    <li><strong>45 Indian Study Cities</strong> &amp; 675 catalog attractions.</li>
-                    <li><strong>10&times;10 Pre-recorded Matrix:</strong> Exact walking and driving minutes.</li>
-                    <li><strong>Deterministic Benchmarking:</strong> Jaipur baseline (207 min / INR 585.46 / 1.806 kg CO2).</li>
-                    <li><strong>100% Offline:</strong> Zero external network dependencies or API keys.</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
-        with comp_col2:
-            st.markdown("""
-            <div style="background: #ffffff; border: 1px solid #b6afa3; padding: 14px 18px;">
-                <div style="font-weight: bold; color: #365376; font-size: 0.95rem;">Retired Real-Place Pilot (Archived)</div>
-                <ul style="font-size: 0.82rem; color: #5c5852; line-height: 1.6; margin: 8px 0 0 16px; padding: 0;">
-                    <li><strong>66 Sparse Venues:</strong> Incomplete regional coverage across 34 states.</li>
-                    <li><strong>Unrecorded Transit Matrix:</strong> Required live OSRM network calls.</li>
-                    <li><strong>Network Fragility:</strong> Vulnerable to API rate limits and network drops.</li>
-                    <li><strong>Status:</strong> Retired to maintain strict academic reproducibility.</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+        rp_col1, rp_col2 = st.columns([1.2, 2.0])
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.info("To generate itineraries and evaluate dual-objective Plan A vs Plan B trade-offs, please switch to Tab 1 ('Synthetic Day Planner (45 Study Cities)') above.")
+        with rp_col1:
+            st.markdown("**1. Select Region or Settlement:**")
+            real_plan_mode = st.radio(
+                "Planning Hub Selection",
+                ["Example Place Pairs", "Search by Settlement Name", "Custom Real Place IDs"],
+                key="real_plan_hub_mode",
+                label_visibility="collapsed"
+            )
+
+            rp_selected_ids = []
+            rp_state_or_district = "Karnataka"
+            rp_settlement_id = None
+
+            if real_plan_mode == "Example Place Pairs":
+                pilot_hub_options = {
+                    "Badami & Aihole (Karnataka - South Heritage)": ["WD:Q825236", "WD:Q3517553"],
+                    "Agra Heritage Circuit (Uttar Pradesh - North)": ["WD:Q9141", "WD:Q171857"],
+                    "Delhi Historic Monuments (Delhi - North)": ["WD:Q187635", "WD:Q189648"],
+                    "Sivasagar Ahom Heritage (Assam - Non-Metro North-East)": ["OSM:way/458786992", "OSM:way/155294111"],
+                }
+                chosen_hub_key = st.selectbox("Select Pilot Hub", list(pilot_hub_options.keys()), key="real_pilot_hub_select")
+                rp_selected_ids = pilot_hub_options[chosen_hub_key]
+
+            elif real_plan_mode == "Search by Settlement Name":
+                settle_search = st.text_input("Enter Settlement Name", value="Badami", key="real_plan_settle_input").strip()
+                cat_store_inst = RealCatalogStore(REAL_CATALOG_DB)
+                found_settles = cat_store_inst.search_settlements(settle_search) if settle_search else []
+                if found_settles:
+                    settle_map = {f"{s.name} ({s.state} · {s.settlement_type.title()})": s.settlement_id for s in found_settles[:10]}
+                    picked_s = st.selectbox("Choose Matching Settlement", list(settle_map.keys()), key="real_plan_settle_pick")
+                    rp_settlement_id = settle_map[picked_s]
+                else:
+                    st.caption("No matching settlements found in current catalog extract.")
+
+            else:  # Custom Real Place IDs
+                custom_ids_input = st.text_area(
+                    "Enter Source IDs (comma-separated)",
+                    value="WD:Q825236, WD:Q3517553",
+                    key="real_plan_custom_ids"
+                )
+                rp_selected_ids = [s.strip() for s in custom_ids_input.split(",") if s.strip()]
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("**2. Trip Schedule & Traveler Profile:**")
+            rp_date = st.date_input("Visit Date", value=date(2026, 11, 10), key="real_plan_date")
+
+            c_time1, c_time2 = st.columns(2)
+            with c_time1:
+                rp_start = st.text_input("Start Time (24h)", value="09:00", key="real_plan_start")
+            with c_time2:
+                rp_window = st.number_input("Max Window (hrs)", min_value=2.0, max_value=14.0, value=7.0, step=0.5, key="real_plan_window")
+
+            c_mod1, c_mod2 = st.columns(2)
+            with c_mod1:
+                available_modes = ["Driving (Car / Cab)"]
+                if configured_backend(TransportMode.WALKING):
+                    available_modes.append("Walking (<25 km)")
+                rp_mode_choice = st.selectbox("Transport Mode", available_modes, key="real_plan_mode_select")
+                rp_mode = TransportMode.DRIVING if "Driving" in rp_mode_choice else TransportMode.WALKING
+            with c_mod2:
+                rp_visitor = st.selectbox("Visitor Profile", ["INDIAN_ADULT", "FOREIGN_ADULT", "CHILD"], key="real_plan_visitor_select")
+
+            c_dur1, c_dur2 = st.columns(2)
+            with c_dur1:
+                rp_dwell = st.number_input("Dwell Time (min/stop)", min_value=15, max_value=180, value=60, step=15, key="real_plan_dwell")
+            with c_dur2:
+                rp_round_trip = st.checkbox("Round Trip (Return to Start)", value=False, key="real_plan_round_trip")
+
+            rp_step_free = st.checkbox("Step-Free Access Required", value=False, key="real_plan_step_free")
+            rp_budget = st.number_input("Admission budget (INR; known fees only)", min_value=0.0,
+                                        value=1000.0, step=100.0, key="real_plan_budget")
+            rp_stops = st.number_input("Desired stops", min_value=1, max_value=5, value=2,
+                                       key="real_plan_stops") if not rp_selected_ids else len(rp_selected_ids)
+            if not configured_backend(rp_mode):
+                st.warning("No routing backend configured for this mode. Set CULTUREROUTE_OSRM_DRIVING_URL or CULTUREROUTE_OSRM_WALKING_URL.")
+
+            run_real_btn = st.button("Generate Real-Place Day Plan →", type="primary", key="btn_run_real_planner")
+
+        with rp_col2:
+            st.markdown("### Real Itinerary & Directed Routing Results")
+
+            # Execute real planner if requested or default
+            if run_real_btn or "real_plan_result" in st.session_state:
+                if run_real_btn:
+                    with st.spinner("Computing genuine directed routing legs and resolving primary field evidence..."):
+                        try:
+                            res_plan = plan_real_place_day(
+                                catalog_db=REAL_CATALOG_DB,
+                                evidence_db=VENUE_EVIDENCE_DB,
+                                routes_db=DEFAULT_ROUTES_DB,
+                                selected_place_ids=rp_selected_ids if rp_selected_ids else None,
+                                settlement_id=rp_settlement_id,
+                                visit_date=rp_date,
+                                start_time=rp_start,
+                                max_duration_hours=float(rp_window),
+                                target_stops=rp_stops,
+                                transport_mode=rp_mode,
+                                step_free_required=rp_step_free,
+                                visitor_scope=rp_visitor,
+                                user_duration_minutes=int(rp_dwell),
+                                round_trip=rp_round_trip,
+                                allow_network=True,
+                                budget_inr=float(rp_budget),
+                            )
+                        except ValueError as exc:
+                            res_plan = {"fastest": None, "infeasible_reason": str(exc)}
+                        st.session_state["real_plan_result"] = res_plan
+                else:
+                    res_plan = st.session_state["real_plan_result"]
+
+                fastest_p = res_plan.get("fastest")
+                infeasible_err = res_plan.get("infeasible_reason")
+
+                if infeasible_err or not fastest_p:
+                    st.error(f"⚠️ Plan Infeasible: {infeasible_err or 'No valid routing or schedule sequence found.'}")
+                    st.caption("CultureRoute provides honest failure reporting rather than manufacturing unrealistic routes or assuming unknown opening windows.")
+                else:
+                    # Result Level Banner
+                    lvl = fastest_p.result_level
+                    if lvl == "VERIFIED":
+                        lvl_bg, lvl_color = "#d1e7dd", "#0f5132"
+                    elif lvl == "PROVISIONAL":
+                        lvl_bg, lvl_color = "#cff4fc", "#055160"
+                    else:
+                        lvl_bg, lvl_color = "#fff3cd", "#664d03"
+
+                    st.markdown(f"""
+                    <div style="background:{lvl_bg}; color:{lvl_color}; padding:10px 14px; border-radius:4px; font-weight:bold; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>Plan Classification: {lvl}</span>
+                        <span style="font-size:0.80rem; font-weight:normal;">{fastest_p.elapsed_formatted} &middot; {fastest_p.total_stops_count} Cultural Stops</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if fastest_p.reasons:
+                        st.caption(fastest_p.reasons[0])
+
+                    # Summary Metrics Bar
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Elapsed Time", fastest_p.elapsed_formatted, f"Start: {fastest_p.start_time}")
+                    cost_val_str = f"INR {fastest_p.known_admission_subtotal_inr:.2f}"
+                    cost_delta = "At least this much; some fees unknown" if any(s.entry_fee is None for s in fastest_p.stops) else "Known admission fees"
+                    m2.metric("Known Admission Subtotal", cost_val_str, cost_delta)
+                    total_dist = sum(l.distance_km for l in fastest_p.legs)
+                    m3.metric("Transit Distance", f"{total_dist:.2f} km", f"{len(fastest_p.legs)} Directed Leg(s)")
+                    m4.metric("Transport Mode", fastest_p.transport_mode, "Configured OSRM profile")
+                    if fastest_p.has_unknown_costs:
+                        st.warning("Total trip cost is unknown. Admission budget and driving fare cannot be guaranteed.")
+                    if res_plan.get("comparison_note"):
+                        st.caption(res_plan["comparison_note"])
+
+                    # Timetable Breakdown
+                    st.markdown("#### Timetable & Stop Schedule")
+                    for s in fastest_p.stops:
+                        fee_disp = f"INR {s.entry_fee:.2f}" if s.entry_fee is not None else "UNKNOWN"
+                        fee_status_badge = f'<span style="font-size:0.75rem; background:#f0ebe1; padding:1px 6px; border-radius:2px;">{s.fee_status}</span>'
+                        st.markdown(f"""
+                        <div style="background:#ffffff; border:1px solid #dcd4c8; padding:10px 14px; margin-bottom:8px;">
+                            <div style="display:flex; justify-content:space-between;">
+                                <strong>Stop {s.stop_index}: {s.name}</strong>
+                                <span>{s.arrival_time} &ndash; {s.visit_end_time}</span>
+                            </div>
+                            <div style="font-size:0.82rem; color:#5c5852; margin-top:4px;">
+                                Admission: <strong>{fee_disp}</strong> {fee_status_badge} &middot;
+                                Schedule Status: <code>{s.hours_status}</code> &middot;
+                                Dwell: {s.duration_minutes} min ({'Traveler input' if s.is_duration_assumption else 'Official'})
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        # Render leg after stop
+                        if s.stop_index <= len(fastest_p.legs):
+                            l = fastest_p.legs[s.stop_index - 1]
+                            st.markdown(f"""
+                            <div style="margin-left: 20px; font-size: 0.82rem; color: #365376; margin-bottom: 8px;">
+                                ↳ <strong>Directed Transit Leg {l.leg_index}:</strong> {l.origin_name} &rarr; {l.destination_name}<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;Distance: {l.distance_km:.2f} km &middot; Travel Time: {l.travel_minutes} min via {l.mode} &middot; Engine: <em>{l.source}</em>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                    # Routed Road Map
+                    st.markdown("#### Genuine Routed Road Geometry Map")
+                    render_plan_spatial_map(fastest_p, "Real Route Plan", line_color="#982b32")
+                    st.caption("Solid lines use geometry returned by the configured routing backend. Venue access and live conditions may differ.")
+            else:
+                st.info("Select a hub or settlement and request a routed plan. Missing evidence will remain visible.")
 
 
 # ==============================================================================
@@ -1259,7 +1939,7 @@ elif view_mode == "Compare":
         cmp_choice = st.radio(
             "Select Comparison Subject:",
             [
-                f"Active Generated Plan: {submitted_city} ({submitted_snap.get('target_stops', 3)} stops, INR {submitted_snap.get('budget_inr', 1000):,.0f})",
+                f"Active Generated Plan: {submitted_city} ({submitted_snap.get('target_stops', 3)} stops, INR {submitted_snap.get('budget_inr', 1000):,.0f}, {submitted_snap.get('transport_mode', 'cab')})",
                 "Standard Jaipur Benchmark Fixture (207 min / INR 585.46 / 1.806 kg CO2)"
             ],
             index=0,
@@ -1267,13 +1947,27 @@ elif view_mode == "Compare":
             key="cmp_subject_radio"
         )
         if "Standard Jaipur Benchmark" in cmp_choice:
-            jaipur_plans = plan_synthetic_day(city_name="Jaipur", start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
+            jaipur_plans = plan_synthetic_day(
+                city_name="Jaipur",
+                visit_date="2026-08-29",
+                start_time="09:00",
+                max_duration_hours=6.0,
+                budget_inr=1000.0,
+                target_stops=3,
+                transport_mode="cab",
+                step_free_only=False,
+                preferred_categories=[]
+            )
             snapshot = {
                 "city": "Jaipur",
+                "visit_date": "2026-08-29",
                 "start_time": "09:00",
                 "window_hours": 6.0,
                 "budget_inr": 1000.0,
                 "target_stops": 3,
+                "transport_mode": "cab",
+                "step_free_only": False,
+                "preferred_categories": [],
                 "plans": jaipur_plans,
                 "is_default_fixture": True,
                 "stale": False,
@@ -1282,13 +1976,27 @@ elif view_mode == "Compare":
             snapshot = submitted_snap
     else:
         if submitted_snap is None:
-            jaipur_plans = plan_synthetic_day(city_name="Jaipur", start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
+            jaipur_plans = plan_synthetic_day(
+                city_name="Jaipur",
+                visit_date="2026-08-29",
+                start_time="09:00",
+                max_duration_hours=6.0,
+                budget_inr=1000.0,
+                target_stops=3,
+                transport_mode="cab",
+                step_free_only=False,
+                preferred_categories=[]
+            )
             snapshot = {
                 "city": "Jaipur",
+                "visit_date": "2026-08-29",
                 "start_time": "09:00",
                 "window_hours": 6.0,
                 "budget_inr": 1000.0,
                 "target_stops": 3,
+                "transport_mode": "cab",
+                "step_free_only": False,
+                "preferred_categories": [],
                 "plans": jaipur_plans,
                 "is_default_fixture": True,
                 "stale": False,
@@ -1306,7 +2014,8 @@ elif view_mode == "Compare":
     if fastest is None and cultural is None:
         st.warning(
             f"Infeasible Plan Comparison: No feasible {snapshot.get('target_stops', 3)}-stop itinerary found for {cmp_city} "
-            f"under the submitted budget INR {snapshot.get('budget_inr', 1000):,.2f} and duration {snapshot.get('window_hours', 6.0)} hours."
+            f"under the submitted budget INR {snapshot.get('budget_inr', 1000):,.2f}, duration {snapshot.get('window_hours', 6.0)} hours, "
+            f"and mode '{snapshot.get('transport_mode', 'cab')}'."
         )
         st.markdown('''
         <a href="?view=planner" target="_self" class="cr-button" style="display: inline-block; padding: 8px 16px; text-decoration: none; margin: 12px 0;">
@@ -1318,6 +2027,9 @@ elif view_mode == "Compare":
         cost_diff = cultural.total_cost_inr - fastest.total_cost_inr
         carbon_diff = cultural.estimated_carbon_kg - fastest.estimated_carbon_kg
         cultural_gain = cultural.cultural_stops_count - fastest.cultural_stops_count
+
+        # Check for identical route
+        is_same_route = ([s.poi_id for s in fastest.stops] == [s.poi_id for s in cultural.stops])
 
         # Interactive City Selector and Benchmark Presets for Dynamic Comparison
         all_study_cities = get_study_cities()
@@ -1335,20 +2047,38 @@ elif view_mode == "Compare":
         </div>
         """, unsafe_allow_html=True)
 
+        def run_compare_recalc(target_city: str, v_date: str = "2026-08-29", start: str = "09:00",
+                               win: float = 6.0, bud: float = 1000.0, stops: int = 3, mode: str = "cab"):
+            new_plans = plan_synthetic_day(
+                city_name=target_city,
+                visit_date=v_date,
+                start_time=start,
+                max_duration_hours=win,
+                budget_inr=bud,
+                target_stops=stops,
+                transport_mode=mode
+            )
+            is_fix = (target_city == "Jaipur" and v_date == "2026-08-29" and start == "09:00" and
+                      win == 6.0 and bud == 1000.0 and stops == 3 and mode == "cab")
+            st.session_state["plan_snapshot"] = {
+                "city": target_city,
+                "visit_date": v_date,
+                "start_time": start,
+                "window_hours": win,
+                "budget_inr": bud,
+                "target_stops": stops,
+                "transport_mode": mode,
+                "step_free_only": False,
+                "preferred_categories": [],
+                "plans": new_plans,
+                "is_default_fixture": is_fix,
+                "stale": False
+            }
+
         def on_cmp_city_dropdown_change():
             chosen_city = st.session_state.get("compare_city_select")
             if chosen_city:
-                new_plans = plan_synthetic_day(city_name=chosen_city, start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
-                st.session_state["plan_snapshot"] = {
-                    "city": chosen_city,
-                    "start_time": "09:00",
-                    "window_hours": 6.0,
-                    "budget_inr": 1000.0,
-                    "target_stops": 3,
-                    "plans": new_plans,
-                    "is_default_fixture": (chosen_city == "Jaipur"),
-                    "stale": False
-                }
+                run_compare_recalc(chosen_city)
 
         st.markdown("**Quick Benchmark Hubs (Instant 1-Click Comparison):**")
         quick_cmp_hubs = ["Jaipur (Spec Baseline)", "Delhi", "Varanasi", "Mumbai", "Kochi", "Agra", "Bengaluru"]
@@ -1357,17 +2087,7 @@ elif view_mode == "Compare":
             target_cmp = "Jaipur" if "Jaipur" in picked_cmp_hub else picked_cmp_hub
             if target_cmp != st.session_state.get("compare_city_select"):
                 st.session_state["compare_city_select"] = target_cmp
-                new_plans = plan_synthetic_day(city_name=target_cmp, start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
-                st.session_state["plan_snapshot"] = {
-                    "city": target_cmp,
-                    "start_time": "09:00",
-                    "window_hours": 6.0,
-                    "budget_inr": 1000.0,
-                    "target_stops": 3,
-                    "plans": new_plans,
-                    "is_default_fixture": (target_cmp == "Jaipur"),
-                    "stale": False
-                }
+                run_compare_recalc(target_cmp)
                 st.rerun()
 
         ctrl_c1, ctrl_c2, ctrl_c3, ctrl_c4 = st.columns([1.6, 1.2, 1.3, 1.3], vertical_alignment="bottom")
@@ -1375,57 +2095,32 @@ elif view_mode == "Compare":
             selected_cmp_city = st.selectbox("Select Study City to Compare", all_city_names, index=current_city_idx, key="compare_city_select", on_change=on_cmp_city_dropdown_change)
         with ctrl_c2:
             if st.button(f"Recalculate {selected_cmp_city}", key="btn_run_compare_city"):
-                new_plans = plan_synthetic_day(city_name=selected_cmp_city, start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
-                st.session_state["plan_snapshot"] = {
-                    "city": selected_cmp_city,
-                    "start_time": "09:00",
-                    "window_hours": 6.0,
-                    "budget_inr": 1000.0,
-                    "target_stops": 3,
-                    "plans": new_plans,
-                    "is_default_fixture": (selected_cmp_city == "Jaipur"),
-                    "stale": False
-                }
+                run_compare_recalc(selected_cmp_city)
                 st.rerun()
         with ctrl_c3:
             if st.button("Load Jaipur Baseline", key="btn_load_jaipur_baseline_cmp"):
-                jaipur_plans = plan_synthetic_day(city_name="Jaipur", start_time="09:00", max_duration_hours=6.0, budget_inr=1000.0, target_stops=3)
-                st.session_state["plan_snapshot"] = {
-                    "city": "Jaipur",
-                    "start_time": "09:00",
-                    "window_hours": 6.0,
-                    "budget_inr": 1000.0,
-                    "target_stops": 3,
-                    "plans": jaipur_plans,
-                    "is_default_fixture": True,
-                    "stale": False
-                }
+                run_compare_recalc("Jaipur")
                 st.session_state["compare_city_select"] = "Jaipur"
                 st.rerun()
         with ctrl_c4:
             if st.button("Load Agra Preset (4 Stops)", key="btn_load_agra_preset_cmp"):
-                agra_plans = plan_synthetic_day(city_name="Agra", start_time="09:00", max_duration_hours=9.0, budget_inr=1500.0, target_stops=4)
-                st.session_state["plan_snapshot"] = {
-                    "city": "Agra",
-                    "start_time": "09:00",
-                    "window_hours": 9.0,
-                    "budget_inr": 1500.0,
-                    "target_stops": 4,
-                    "plans": agra_plans,
-                    "is_default_fixture": False,
-                    "stale": False
-                }
+                run_compare_recalc("Agra", win=9.0, bud=1500.0, stops=4)
                 st.rerun()
 
         # Context header
         if is_fixture:
             banner_title = "Specification Baseline Trade-Off Summary"
             banner_badge = "JAIPUR BENCHMARK FIXTURE"
-            banner_sub = "Jaipur Saturday &middot; 09:00 &middot; 6 hours &middot; INR 1,000 budget &middot; 3 stops"
+            banner_sub = f"Jaipur Saturday ({snapshot.get('visit_date', '2026-08-29')}) &middot; 09:00 &middot; 6 hours &middot; INR 1,000 budget &middot; 3 stops &middot; Cab"
         else:
             banner_title = f"Submitted Plan Trade-Off Summary: {cmp_city}"
             banner_badge = "USER SUBMITTED SNAPSHOT"
-            banner_sub = f"{cmp_city} &middot; Start: {snapshot.get('start_time', '09:00')} &middot; Window: {snapshot.get('window_hours', 6.0)}h &middot; Budget: INR {snapshot.get('budget_inr', 1000):,.2f} &middot; {snapshot.get('target_stops', 3)} stops"
+            banner_sub = (
+                f"{cmp_city} &middot; Date: {snapshot.get('visit_date', '2026-08-29')} &middot; "
+                f"Start: {snapshot.get('start_time', '09:00')} &middot; Window: {snapshot.get('window_hours', 6.0)}h &middot; "
+                f"Budget: INR {snapshot.get('budget_inr', 1000):,.2f} &middot; {snapshot.get('target_stops', 3)} stops &middot; "
+                f"Mode: {snapshot.get('transport_mode', 'cab')}"
+            )
 
         st.markdown(f"""
         <div style="background: var(--panel); border: 1.5px solid var(--line); border-left: 4px solid var(--oxblood); padding: 14px 18px; margin-bottom: 20px;">
@@ -1436,6 +2131,13 @@ elif view_mode == "Compare":
             <div style="font-size: 0.85rem; color: #5c5852; margin-top: 4px;">{banner_sub}</div>
         </div>
         """, unsafe_allow_html=True)
+
+        if is_same_route:
+            st.info(
+                f"Identical Objective Result: In {cmp_city}, the identical route achieves both minimum elapsed duration "
+                f"({fastest.elapsed_formatted}) and maximum cultural stops ({fastest.cultural_stops_count} stops). "
+                "There is no trade-off penalty between speed and cultural content."
+            )
 
         st.markdown(f"""
         <div class="plan-grid" style="margin-bottom: 25px;">
@@ -1467,19 +2169,23 @@ elif view_mode == "Compare":
                 <span class="plan-tag">+{cultural_gain} cultural stop</span>
             </article>
         </div>
-        <div style="background: var(--panel); border: 1px solid var(--line); padding: 18px 24px; margin-bottom: 24px; transform: rotate(-0.3deg);">
-            <div style="font-family: var(--display); font-size: 1.2rem; font-weight: 500; color: #292925;">
-                {banner_title} &middot; Trade-Off Summary
-            </div>
-            <div style="font-size: 0.90rem; color: #5c5852; margin-top: 6px; line-height: 1.6;">
-                Choosing <strong>Plan B (Most Cultural)</strong> over <strong>Plan A (Fastest)</strong> yields:
-                <strong style="color: #982b32;">+{cultural_gain} cultural stop</strong> in exchange for
-                <strong>+{time_diff} minutes</strong> elapsed duration,
-                <strong>+INR {cost_diff:.2f}</strong> total expenses, and
-                <strong>+{carbon_diff:.3f} kg</strong> estimated transit carbon.
-            </div>
-        </div>
         """, unsafe_allow_html=True)
+
+        if not is_same_route:
+            st.markdown(f"""
+            <div style="background: var(--panel); border: 1px solid var(--line); padding: 18px 24px; margin-bottom: 24px; transform: rotate(-0.3deg);">
+                <div style="font-family: var(--display); font-size: 1.2rem; font-weight: 500; color: #292925;">
+                    {banner_title} &middot; Trade-Off Summary
+                </div>
+                <div style="font-size: 0.90rem; color: #5c5852; margin-top: 6px; line-height: 1.6;">
+                    Choosing <strong>Plan B (Most Cultural)</strong> over <strong>Plan A (Fastest)</strong> yields:
+                    <strong style="color: #982b32;">+{cultural_gain} cultural stop</strong> in exchange for
+                    <strong>+{time_diff} minutes</strong> elapsed duration,
+                    <strong>+INR {cost_diff:.2f}</strong> total expenses, and
+                    <strong>+{carbon_diff:.3f} kg</strong> estimated transit carbon.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
         # Visual Side-by-Side Trade-off Bar Chart
         comp_metrics_df = pd.DataFrame([
@@ -1520,8 +2226,8 @@ elif view_mode == "Compare":
             st.subheader("Plan A: Fastest Plan Details")
             st.markdown(f"- **Elapsed Time**: {fastest.elapsed_formatted} ({fastest.elapsed_minutes} min)")
             st.markdown(f"- **Cultural Stops**: {fastest.cultural_stops_count} of {fastest.total_stops_count}")
-            st.markdown(f"- **Total Fees**: INR {fastest.entry_cost_inr:.2f}")
-            st.markdown(f"- **Transit Costs**: INR {fastest.travel_cost_inr:.2f}")
+            st.markdown(f"- **Total Fees**: INR {fastest.entry_cost_inr:.2f} (Decimal)")
+            st.markdown(f"- **Transit Costs**: INR {fastest.travel_cost_inr:.2f} (Decimal)")
             st.markdown(f"- **Total Budget Used**: INR {fastest.total_cost_inr:.2f}")
             st.markdown(f"- **Estimated Carbon**: {fastest.estimated_carbon_kg:.3f} kg")
 
@@ -1532,16 +2238,22 @@ elif view_mode == "Compare":
                 "Category": s.category,
                 "Is Cultural": s.is_cultural,
                 "Arrive": s.arrival_time,
+                "Wait (m)": s.wait_minutes,
                 "Depart": s.visit_end_time,
                 "Duration": f"{s.duration_minutes}m",
-                "Fee (INR)": float(s.entry_fee)
+                "Fee (INR)": float(s.entry_fee),
+                "Hours Status": s.hours_status,
+                "Accessibility": s.accessibility
             } for s in fastest.stops])
             st.dataframe(f_df, hide_index=True, use_container_width=True)
 
             st.markdown("**Directed Legs (Plan A):**")
             f_legs_df = pd.DataFrame([{
                 "Leg": l.leg_index,
+                "Leg ID": l.matrix_id,
+                "From ID": l.origin_id,
                 "From": l.origin_name,
+                "To ID": l.destination_id,
                 "To": l.destination_name,
                 "Mode": l.mode,
                 "Dist (km)": float(l.distance_km),
@@ -1555,8 +2267,8 @@ elif view_mode == "Compare":
             st.subheader("Plan B: Most Cultural Plan Details")
             st.markdown(f"- **Elapsed Time**: {cultural.elapsed_formatted} ({cultural.elapsed_minutes} min)")
             st.markdown(f"- **Cultural Stops**: {cultural.cultural_stops_count} of {cultural.total_stops_count}")
-            st.markdown(f"- **Total Fees**: INR {cultural.entry_cost_inr:.2f}")
-            st.markdown(f"- **Transit Costs**: INR {cultural.travel_cost_inr:.2f}")
+            st.markdown(f"- **Total Fees**: INR {cultural.entry_cost_inr:.2f} (Decimal)")
+            st.markdown(f"- **Transit Costs**: INR {cultural.travel_cost_inr:.2f} (Decimal)")
             st.markdown(f"- **Total Budget Used**: INR {cultural.total_cost_inr:.2f}")
             st.markdown(f"- **Estimated Carbon**: {cultural.estimated_carbon_kg:.3f} kg")
 
@@ -1567,16 +2279,22 @@ elif view_mode == "Compare":
                 "Category": s.category,
                 "Is Cultural": s.is_cultural,
                 "Arrive": s.arrival_time,
+                "Wait (m)": s.wait_minutes,
                 "Depart": s.visit_end_time,
                 "Duration": f"{s.duration_minutes}m",
-                "Fee (INR)": float(s.entry_fee)
+                "Fee (INR)": float(s.entry_fee),
+                "Hours Status": s.hours_status,
+                "Accessibility": s.accessibility
             } for s in cultural.stops])
             st.dataframe(c_df, hide_index=True, use_container_width=True)
 
             st.markdown("**Directed Legs (Plan B):**")
             c_legs_df = pd.DataFrame([{
                 "Leg": l.leg_index,
+                "Leg ID": l.matrix_id,
+                "From ID": l.origin_id,
                 "From": l.origin_name,
+                "To ID": l.destination_id,
                 "To": l.destination_name,
                 "Mode": l.mode,
                 "Dist (km)": float(l.distance_km),
@@ -2540,17 +3258,17 @@ elif view_mode == "Information":
         st.latex(r"\mathbb{P}(Y_{i,t} = y \mid \mathbf{x}_{i,t}) = \frac{\lambda_{i,t}^y e^{-\lambda_{i,t}}}{y!}, \quad y \in \{0, 1, 2, \dots\}")
         st.latex(r"\ln(\lambda_{i,t}) = \beta_0 + \sum_{c=1}^{44} \beta_c \cdot \mathbb{I}(\text{city}=c) + \beta_{\text{lag1}} y_{i,t-1} + \beta_{\text{lag2}} y_{i,t-2} + \beta_{\text{4w}} \bar{y}_{i,t-4:t-1}")
         st.latex(r"\lambda_{i,t} = \exp\left(\beta_0 + \mathbf{x}_{i,t}^\top \boldsymbol{\beta}\right)")
-        
+
         st.markdown("""
         **Why Poisson over Ordinary Least Squares (OLS)?**
         - **Non-Negative Discrete Support:** Interaction counts are non-negative integers (<em>y</em> &ge; 0). OLS assumes unbounded Gaussian errors and routinely predicts impossible negative counts (<em>y&#770;</em> &lt; 0).
         - **Mean-Variance Relationship:** In count telemetry, variance scales with mean volume (Var(<em>Y</em>) = E[<em>Y</em>] = &lambda;). Linear regression incorrectly assumes constant homoscedastic variance.
-        
+
         **Out-of-Sample Validation & Performance:**
         - Tested on a strictly disjoint 12-week chronological holdout (Weeks 46..57, 540 rows).
         - Achieves **0.7938 MAE** (interactions/city-week) vs **0.9537 MAE** for naive previous-week baseline (**-16.8% error reduction**).
         - On non-zero active weeks, error drops to **0.7786 MAE** vs 1.2101 for lag-1.
-        
+
         **Exact 95% Confidence Bounds:**
         """, unsafe_allow_html=True)
         st.latex(r"\text{CI}_{95\%} = \left[ Q_{\text{Poisson}}(0.025; \lambda), \; Q_{\text{Poisson}}(0.975; \lambda) \right]")
@@ -2665,7 +3383,7 @@ elif view_mode == "Information":
         ### CultureRoute Implementation:
         CultureRoute investigates how local cultural assets (heritage sites, historical forts, museums, spiritual monuments, and regional culinary traditions)
         can be preserved and highlighted when travelers plan single-day itineraries under strict time and financial budgets.
-        
+
         - **Cultural Engagement Maximization:** Evaluates the trade-off between minimum elapsed travel time (Plan A) and maximum cultural stops (Plan B).
         - **Synthetic Academic Boundary:** As this is an educational mini-project operating exclusively on the two approved synthetic research datasets
           (`SmartTrip (1).zip` and `WanderMatch.zip`), **no real-world employment creation, commercial revenue generation, or live visitor footfall is claimed**.
@@ -2676,19 +3394,19 @@ elif view_mode == "Information":
         st.subheader("Three Analytical Populations in CultureRoute")
         st.markdown("""
         To avoid denominator conflation, CultureRoute strictly separates cultural share analysis into three distinct populations:
-        
+
         1. **Catalog Listings Population (675 Attractions across 45 Cities):**
            - Represents static catalog supply.
            - Exactly **211 out of 675 attractions** belong to cultural categories (`heritage`, `museum`, `religious`, `food`).
            - **Baseline Cultural Share:** **31.3%**
            - *Note on Matrix Coverage:* Each city lists 15 catalog attractions, of which 10 have recorded directed travel matrix legs.
-        
+
         2. **Telemetry Actions Population (6,850 User Interactions):**
            - Represents user demand and behavioral interest in WanderMatch.
            - Includes views, clicks, saves, likes, searches, dismissals, and shares.
            - Exactly **2,144 out of 6,850 actions** involve cultural attractions.
            - **Baseline Cultural Share:** **31.3%**
-        
+
         3. **Planned Stops Population (3,191 Selected Stops):**
            - Represents actual algorithmic itinerary inclusions in SmartTrip.
            - Shared active-and-confirmed stop contract: active itineraries (`is_active = 1`), confirmed status (`status = 'confirmed'`), non-cancelled India trips, matching destination city.
@@ -2753,7 +3471,7 @@ elif view_mode == "Information":
         st.subheader("6. Jaipur Specification Fixture Reproduction Guide")
         st.markdown("""
         To independently verify the deterministic itinerary engine, execute the following parameters in the **Planner** or **Compare** view:
-        
+
         | Input Parameter | Specification Value | Description |
         | :--- | :--- | :--- |
         | **City** | `Jaipur` | Rajasthan capital, 15 listed POIs, 10 matrix-covered |
@@ -2762,14 +3480,14 @@ elif view_mode == "Information":
         | **Time Window** | `6.0 Hours` | Maximum total elapsed duration |
         | **Budget** | `INR 1,000.00` | Total entry fee + transit cost cap |
         | **Target Stops** | `3 Stops` | Exact sequence of distinct attractions |
-        
+
         #### Expected Mathematical Outcomes:
         - **Plan A · Fastest Feasible Plan (Min Elapsed Time):**
           - Elapsed Duration: **207 minutes** (3h 27m)
           - Cultural Stops: **1 / 3 stops**
           - Total Cost: **INR 585.46** (Entry fees + transit fares)
           - Carbon Footprint: **1.806 kg CO2**
-        
+
         - **Plan B · Most Cultural Plan (Max Cultural Stops):**
           - Elapsed Duration: **227 minutes** (3h 47m)
           - Cultural Stops: **2 / 3 stops** (dynamic gain: **+1 cultural stop**)

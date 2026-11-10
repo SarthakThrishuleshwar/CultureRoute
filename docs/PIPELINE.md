@@ -1,7 +1,7 @@
 # CultureRoute data and prediction pipeline
 
-**Status:** Target pipeline and reproducible source audit; no production scheduler or materialized pipeline is present  
-**Companion diagrams:** [`ARCHITECTURE.md`](ARCHITECTURE.md)  
+**Status:** Reproducible synthetic source audit and [implemented six-zone real catalog/evidence/route pipeline](PHASE8_REPAIR.md). No production scheduler or deployment is present.
+**Companion diagrams:** [`ARCHITECTURE.md`](ARCHITECTURE.md)
 **Source contracts:** [`DATABASE.md`](DATABASE.md), [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md)
 
 ## 1. Purpose and boundaries
@@ -57,7 +57,7 @@ The India event subset has 225 records and 46 null `expected_footfall` values. P
 2. Run `python docs/audit_sources.py`; require zero assertion failures. For a changed source, investigate differences and update documented baselines intentionally.
 3. Run the packs' own conformance checks if they are available from an extracted copy. These checks supplement, not replace, the project-specific scope audit.
 4. Build prepared views in dependency order P2→P7; record row counts and key uniqueness after each stage.
-5. Re-run calculation fixtures: three cultural shares, saved/planned join, complete-week count and MAEs. Once the planner exists, reproduce the Jaipur route fixture with source IDs and exact decimal totals.
+5. Re-run calculation fixtures: three cultural shares, saved/planned join, complete-week count and MAEs. The implemented synthetic planner reproduces the Jaipur route fixture with source IDs and exact decimal totals.
 6. Version the resulting prepared snapshot and expose its cutoff and method version in the UI/export metadata.
 7. On any failure, keep the prior verified snapshot available only if the UI clearly identifies it as stale; otherwise stop serving derived results. The staleness policy is an operational decision.
 

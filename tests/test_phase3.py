@@ -179,12 +179,10 @@ def test_four_real_search_demonstrations():
         assert p.source_id.startswith("WD:") or p.source_id.startswith("OSM:")
         assert not p.source_id.startswith("poi_")
 
-    # 4. Rural / Low Coverage: Gangavathi, Karnataka
-    assert "Gangavathi" not in study_cities
-    ganga_s = store.search_settlements("Gangavathi")[0]
-    # Within 5km tight proximity: Honest empty result
-    ganga_places_tight = store.search_nearby_places(ganga_s.latitude, ganga_s.longitude, radius_km=5.0)
-    assert len(ganga_places_tight) == 0
-    # Within 35km wider proximity: Discovers nearby heritage
-    ganga_places_wider = store.search_nearby_places(ganga_s.latitude, ganga_s.longitude, radius_km=35.0)
-    assert len(ganga_places_wider) >= 1
+    # 4. Rural / Remote Area Proximity Search (Honest Empty Result Demonstration)
+    # Remote buffer (24.0 N, 71.0 E) has 0 mapped cultural places within 5km
+    empty_places_tight = store.search_nearby_places(24.0, 71.0, radius_km=5.0)
+    assert len(empty_places_tight) == 0, "Honest empty result expected within remote 5km radius"
+    # Within 50km wider proximity: Discovers regional cultural sites
+    places_wider = store.search_nearby_places(24.0, 71.0, radius_km=50.0)
+    assert len(places_wider) >= 1

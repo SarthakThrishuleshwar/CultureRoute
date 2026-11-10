@@ -24,7 +24,7 @@ from cultureroute.study_data import verify_and_audit_study, get_study_cities
 from cultureroute.catalog import RealCatalogStore
 from cultureroute.evidence import VenueEvidenceStore
 from cultureroute.routing import RouteLegStore, TransportMode, compute_directed_leg
-from cultureroute.planner import plan_synthetic_day, plan_real_pilot_day
+from cultureroute.planner import plan_synthetic_day, plan_real_place_day
 from cultureroute.analytics import (
     compute_cultural_shares,
     compute_weekly_forecast_backtest,
@@ -67,11 +67,11 @@ def test_six_screens_presence_in_app_entrypoint():
     assert 'view_param in ["lab", "devlab"]' in content
 
 
-def test_real_traveler_end_to_end_journey():
-    """Verify complete traveler flow: discovery -> evidence check -> route leg -> pilot plan."""
+def test_real_traveler_end_to_end_journey(tmp_path, monkeypatch):
+    """Discovery and a mocked provider yield a conditional plan without fabricated facts."""
     store = RealCatalogStore(CATALOG_DB)
-    evidence_store = VenueEvidenceStore(CATALOG_DB)
-    route_store = RouteLegStore(CATALOG_DB)
+    evidence_store = VenueEvidenceStore(ROOT_DIR / "data" / "venue_evidence.db")
+    route_store = RouteLegStore(tmp_path / "routes.db")
 
     # 1. Discover places in Karnataka
     karnataka_places = store.get_places_by_state("Karnataka")
@@ -81,7 +81,26 @@ def test_real_traveler_end_to_end_journey():
 
     # 2. Check field evidence
     res_fee = evidence_store.resolve_field(badami.source_id, "entry_fee", visit_date=date(2026, 8, 15))
-    assert res_fee.status.value in ["KNOWN", "CONFLICTING", "STALE", "UNKNOWN"]
+    assert res_fee.status.value == "UNKNOWN"
+
+    class Reply:
+        status_code = 200
+        text = ""
+        def __init__(self, coordinates): self.coordinates = coordinates
+        def json(self):
+            return {"code": "Ok", "routes": [{"distance": 35000, "duration": 2400,
+                "geometry": {"coordinates": self.coordinates}}]}
+
+    def provider(url, **_):
+        coords = [[badami.longitude, badami.latitude],
+                  [(badami.longitude + durga.longitude) / 2, (badami.latitude + durga.latitude) / 2],
+                  [durga.longitude, durga.latitude]]
+        if f"{durga.longitude:.6f},{durga.latitude:.6f}" in url.split(";")[0]:
+            coords.reverse()
+        return Reply(coords)
+
+    monkeypatch.setenv("CULTUREROUTE_OSRM_DRIVING_URL", "https://configured.example.invalid")
+    monkeypatch.setattr("cultureroute.routing.requests.get", provider)
 
     # 3. Directed route calculation
     leg = compute_directed_leg(
@@ -93,22 +112,25 @@ def test_real_traveler_end_to_end_journey():
         destination_lon=durga.longitude,
         mode=TransportMode.DRIVING,
         store=route_store,
-        allow_network=False
+        allow_network=True
     )
     assert leg.is_available is True
+    assert len(leg.polyline_points) == 3
     assert leg.distance_km > 25.0
     assert leg.duration_minutes > 30.0
 
     # 4. Generate real day plan
-    plans = plan_real_pilot_day(
-        catalog_db=CATALOG_DB,
-        state_or_district="Karnataka",
-        visit_date=date(2026, 8, 15),
-        target_stops=3
-    )
+    plans = plan_real_place_day(catalog_db=CATALOG_DB,
+        evidence_db=ROOT_DIR / "data" / "venue_evidence.db", routes_db=tmp_path / "routes.db",
+        selected_place_ids=[badami.source_id, durga.source_id],
+        visit_date=date(2026, 11, 10), target_stops=2, user_duration_minutes=70)
     assert plans["fastest"] is not None
-    assert plans["fastest"].total_stops_count == 3
+    assert plans["fastest"].total_stops_count == 2
     assert plans["fastest"].namespace == "REAL"
+    assert plans["fastest"].result_level == "DISCOVERY-ONLY"
+    assert plans["fastest"].has_unknown_costs
+    assert plans["fastest"].total_cost_inr is None
+    assert all(s.is_duration_assumption for s in plans["fastest"].stops)
 
 
 def test_research_evaluator_end_to_end_journey():
@@ -150,11 +172,14 @@ def test_research_evaluator_end_to_end_journey():
     assert sandbox.execute_query("DELETE FROM cities").is_success is False
 
 
-def test_strict_namespace_isolation():
+def test_strict_namespace_isolation(tmp_path):
     """Verify complete isolation between Real (WD:, SETTLE:) and Synthetic (poi_, cty_, trp_) namespaces."""
     # 1. Synthetic ID rejected from real planner
     with pytest.raises(ValueError):
-        plan_real_pilot_day(catalog_db=CATALOG_DB, state_or_district="cty_c07454f1")
+        plan_real_place_day(catalog_db=CATALOG_DB,
+            evidence_db=ROOT_DIR / "data" / "venue_evidence.db",
+            routes_db=tmp_path / "routes.db", selected_place_ids=["cty_c07454f1"],
+            target_stops=1, allow_network=False)
 
     # 2. Real places store has zero synthetic IDs
     store = RealCatalogStore(CATALOG_DB)

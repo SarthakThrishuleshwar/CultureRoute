@@ -1,11 +1,11 @@
 # CultureRoute overall system and pipeline architecture
 
-**Status:** Target architecture from the project specification, with implementation decisions identified  
+**Status:** Original target architecture; [current local architecture](PHASE8_REPAIR.md) runs Streamlit with separate synthetic and real pipelines. Routing is opt-in, walking requires a verified pedestrian graph, AI/ML remains on standby, and deployment is pending.
 **References:** `CultureRoute_DEV_AAT_Project_Specification.pdf` pp. 2–8; [`PRD.md`](PRD.md), [`TRD.md`](TRD.md), [`DATABASE.md`](DATABASE.md)
 
 ## 1. Architecture intent
 
-One data pipeline prepares two synthetic travel packs for four consumers: the route planner, descriptive analytics, forecast/estimation, and the DEV Lab. A Streamlit website exposes six screens across traveler and evaluator journeys. The architecture prioritizes reproducible counts and traceable output over a distributed service design. Python, SQLite, pandas, Streamlit, Plotly, and Seaborn are the **planned** stack, not evidence of a deployed backend. [Spec pp. 1, 4]
+The synthetic pipeline prepares the two supplied travel packs for planning, descriptive analytics, forecasting exercises, and the DEV Lab. A separate real-place pipeline publishes six-zone extracts, field evidence, and directed route responses into independent stores. The local Streamlit app exposes traveler and evaluator views using Python, SQLite, pandas, and Plotly. A deployed backend, production routing provider, and ML execution are not part of this repair. [Spec pp. 1, 4]
 
 ### Context and containers
 

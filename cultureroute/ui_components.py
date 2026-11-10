@@ -1477,7 +1477,7 @@ def render_sidebar_navigation(active_view: str) -> None:
                 ("datasets", "Datasets"),
                 ("insights", "Insights"),
                 ("devlab", "DEV Lab"),
-                ("model", "Prediction Model"),
+                ("model", "Prediction Model (Standby)"),
             ],
         },
         {
@@ -1519,7 +1519,7 @@ def render_sidebar_navigation(active_view: str) -> None:
         <span class="tape" style="position: absolute; width: 36px; height: 10px; background: rgba(237, 230, 194, 0.8); top: -5px; left: 50%; transform: translateX(-50%) rotate(1.5deg);"></span>
         <div style="font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #982b32; margin-bottom: 2px;">Study Data Boundary</div>
         <p style="margin: 0; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; font-size: 0.68rem; line-height: 1.25; color: #292925;">
-            Read-only SmartTrip & WanderMatch packs. 45 Indian cities. Zero external network calls.
+            Read-only 45-city study; separate India extract catalog. Real routing is opt-in.
         </p>
     </div>
     """
@@ -1670,7 +1670,7 @@ def render_editorial_hero() -> None:
                 <span class="tag-synthetic">45 Indian Cities</span>
                 <span class="tag-synthetic">675 Attractions</span>
                 <span class="tag-synthetic">24 Canonical Tables</span>
-                <span class="tag-synthetic">Zero External Network Calls</span>
+                <span class="tag-synthetic">Real Routing: Opt-In</span>
             </div>
         </div>
         <div class="hero-right">

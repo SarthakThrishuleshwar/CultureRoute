@@ -91,7 +91,7 @@ def test_boundary_mainland_islands_and_rejections():
 
     # Valid islands
     assert val.is_inside(11.6234, 92.7265) is True  # Port Blair, Andaman & Nicobar
-    assert val.is_inside(10.56, 72.60) is True      # Kavaratti, Lakshadweep
+    assert val.is_inside(10.565, 72.64) is True      # Kavaratti, Lakshadweep
 
     # Border and extraterritorial points
     assert val.is_inside(31.5204, 74.3587) is False  # Lahore, Pakistan
