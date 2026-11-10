@@ -1477,7 +1477,7 @@ def render_sidebar_navigation(active_view: str) -> None:
                 ("datasets", "Datasets"),
                 ("insights", "Insights"),
                 ("devlab", "DEV Lab"),
-                ("model", "Prediction Model (Standby)"),
+                ("model", "Prediction Model"),
             ],
         },
         {

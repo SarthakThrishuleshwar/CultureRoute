@@ -990,7 +990,7 @@ elif view_mode == "Discover":
                 with s_col1:
                     settle_query = st.text_input(
                         "Settlement Name",
-                        value="Guwahati",
+                        value="Badami",
                         placeholder="e.g. Guwahati, Badami, Khajuraho, Konark, Sohra, Tezpur, Udaipur, Anegundi",
                         key="real_settle_search_input",
                         label_visibility="collapsed"
@@ -1191,7 +1191,7 @@ elif view_mode == "Discover":
 
             # Phase 7: Place-Detail View and Venue Evidence Inspector
             st.markdown("---")
-            st.markdown("### 🏛️ Place Field Evidence Inspector")
+            st.markdown("### Place Field Evidence Inspector")
             st.caption(
                 "Inspect field-level evidence for real catalog places. "
                 "Fields without direct primary source evidence remain strictly UNKNOWN. "
@@ -1719,7 +1719,7 @@ elif view_mode == "Planner":
         st.markdown("""
         <div style="background: #ffffff; border: 1.5px solid #292925; border-left: 4px solid #982b32; padding: 14px 18px; margin-bottom: 16px;">
             <div style="font-weight: bold; color: #292925; font-size: 1.05rem;">
-                🏛️ Real-Place Planner (Conditional)
+                Real-Place Planner (Conditional)
             </div>
             <div style="font-size: 0.84rem; color: #5c5852; margin-top: 4px; line-height: 1.5;">
                 Explore conditional cultural day trips across indexed Indian places. Routing requires an explicitly configured
@@ -1845,7 +1845,7 @@ elif view_mode == "Planner":
                 infeasible_err = res_plan.get("infeasible_reason")
 
                 if infeasible_err or not fastest_p:
-                    st.error(f"⚠️ Plan Infeasible: {infeasible_err or 'No valid routing or schedule sequence found.'}")
+                    st.error(f"Plan Infeasible: {infeasible_err or 'No valid routing or schedule sequence found.'}")
                     st.caption("CultureRoute provides honest failure reporting rather than manufacturing unrealistic routes or assuming unknown opening windows.")
                 else:
                     # Result Level Banner
